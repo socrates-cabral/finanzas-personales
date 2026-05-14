@@ -34,7 +34,6 @@ import streamlit as st
 from data_loader import (
     NOMBRES_MESES,
     MESES_MAP,
-    cargar_inversiones,
     parsear_liquidacion,
     cargar_liquidaciones_carpeta,
     parsear_amipass_archivo,
@@ -58,9 +57,10 @@ def _safe_excel(fn, vacio_factory):
             return vacio_factory()
     return _wrapped
 
-cargar_saldos_mensuales  = _safe_excel(_excel.cargar_saldos_mensuales, dict)
-cargar_resumen_anual     = _safe_excel(_excel.cargar_resumen_anual, pd.DataFrame)
+cargar_saldos_mensuales   = _safe_excel(_excel.cargar_saldos_mensuales, dict)
+cargar_resumen_anual      = _safe_excel(_excel.cargar_resumen_anual, pd.DataFrame)
 cargar_gastos_compartidos = _safe_excel(_excel.cargar_gastos_compartidos, dict)
+cargar_inversiones        = _safe_excel(_excel.cargar_inversiones, pd.DataFrame)
 
 # DATA_SOURCE se resuelve una vez al importar. Cambiarlo requiere reiniciar
 # la app — por eso es seguro cachear los wrappers de abajo.

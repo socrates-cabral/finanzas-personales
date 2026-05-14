@@ -2241,7 +2241,7 @@ elif pagina == "₿ Inversiones":
                 "fuente":            "Kraken Live",
             })
     else:
-        from data_loader import cargar_inversiones
+        from data_source import cargar_inversiones
         df_inv = cargar_inversiones()
         for _, r in df_inv.iterrows():
             cid  = buscar_coin(str(r.get("ticker_cg", "") or r.get("activo", "")), precios)

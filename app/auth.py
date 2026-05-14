@@ -192,7 +192,7 @@ def logout():
             client.auth.sign_out()
         except Exception:
             pass
-    for k in ("_auth_user_id", "_auth_email", "_auth_client", "_cookie_waited"):
+    for k in ("_auth_user_id", "_auth_email", "_auth_client", "_cookie_intentos"):
         st.session_state.pop(k, None)
     supabase_repo.set_authenticated_client(None, None)
     _borrar_cookie()
@@ -226,13 +226,21 @@ def require_login():
         return
 
     # Sin sesión en memoria — intentar restaurar desde la cookie.
-    # El componente de cookies es asíncrono: en el primer run de una carga
-    # fresca devuelve {} aunque la cookie exista. Damos exactamente UN rerun
-    # de gracia para que el componente sincronice antes de decidir.
+    # El componente de cookies es asíncrono: en una carga fresca (ej. F5)
+    # los primeros reruns devuelven {} aunque la cookie exista. En la nube
+    # el round-trip es más lento que en local, así que esperamos hasta que
+    # get_all() devuelva algo no vacío (señal de que ya sincronizó), con un
+    # tope de reruns como red de seguridad para no quedar en bucle.
     cookies = cm.get_all() or {}
-    if not cookies and not st.session_state.get("_cookie_waited"):
-        st.session_state["_cookie_waited"] = True
+    _GRACIA_MAX = 6
+    _intentos = st.session_state.get("_cookie_intentos", 0)
+    if not cookies and _intentos < _GRACIA_MAX:
+        st.session_state["_cookie_intentos"] = _intentos + 1
+        _render_cargando()
         st.stop()
+
+    # Ya sincronizó (o se agotó la gracia). Reset del contador para el próximo F5.
+    st.session_state.pop("_cookie_intentos", None)
 
     token = cookies.get(_COOKIE_NAME)
     if token and _restaurar_desde_cookie(token):
@@ -240,6 +248,17 @@ def require_login():
 
     _render_login_form()
     st.stop()
+
+
+def _render_cargando():
+    """Indicador breve mientras el componente de cookies sincroniza (evita
+    que la pantalla parpadee en blanco durante los reruns de gracia)."""
+    st.markdown("""
+    <div style="text-align:center; margin-top:18vh; color:#94A3B8;">
+        <div style="font-size:2rem;">💰</div>
+        <p style="margin-top:0.6rem;">Restaurando sesión…</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def _render_login_form():
