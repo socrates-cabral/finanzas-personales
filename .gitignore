@@ -1,0 +1,35 @@
+# ── Secrets / config local ───────────────────────────────────────────────────
+.env
+.env.*
+.streamlit/secrets.toml
+
+# ── Datos personales — NUNCA suben (el repo es solo código) ──────────────────
+# data/ guarda estado personal: deudas, patrimonio, caché de categorización.
+# El código recrea data/ con mkdir(exist_ok=True) si no existe.
+data/
+Info Bancos/
+Documentos/
+Liquidaciones/
+*.xlsm
+*.xlsx
+*.csv
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs/
+*.log
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+
+# ── Claude / worktrees ───────────────────────────────────────────────────────
+.claude/worktrees/
+.claude/settings.local.json
+
+# ── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
