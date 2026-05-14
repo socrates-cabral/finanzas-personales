@@ -8,6 +8,9 @@ font = "sans serif"
 [client]
 showErrorDetails = false
 showSidebarNavigation = false
+# minimal: oculta el menú de desarrollo y reduce atajos como "C" (clear cache)
+# que saltaban al seleccionar/copiar texto. Apropiado para app de producción.
+toolbarMode = "minimal"
 
 [server]
 headless = true
