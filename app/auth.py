@@ -94,6 +94,12 @@ def _guardar_cookie(refresh_token: str):
             _COOKIE_NAME,
             refresh_token,
             expires_at=datetime.now() + timedelta(days=_COOKIE_DAYS),
+            # El CookieManager corre en un iframe cross-site en Streamlit Cloud.
+            # Con el default SameSite=Strict el navegador descarta la cookie al
+            # recargar (por eso F5 cerraba sesión). SameSite=None + Secure es la
+            # combinación correcta para contexto iframe sobre HTTPS.
+            secure=True,
+            same_site="none",
         )
     except Exception:
         pass

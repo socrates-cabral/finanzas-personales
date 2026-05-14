@@ -39,17 +39,14 @@ except ImportError:
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
 
-# ── Path al agente financiero ─────────────────────────────────────────────────
-_AI_AGENT_DIR = Path(__file__).parent.parent.parent / "AI_Agent"
-if str(_AI_AGENT_DIR) not in sys.path:
-    sys.path.insert(0, str(_AI_AGENT_DIR))
-
-_agente_disponible = False
+# ── SDK Anthropic ─────────────────────────────────────────────────────────────
+# Claude se llama vía el SDK anthropic directo — sin dependencias externas al
+# repo (antes usaba un módulo 'agentes' del monorepo, ausente en el repo dedicado).
 try:
-    from agentes.finanzas import _claude, _mem, SYSTEM_ROLES
-    _agente_disponible = True
-except Exception as _err:
-    print(f"[ai_insights] Agente no disponible: {_err}", file=sys.stderr)
+    import anthropic as _anthropic
+    _HAS_ANTHROPIC = True
+except ImportError:
+    _HAS_ANTHROPIC = False
 
 
 # ── System prompt base para finanzas personales ───────────────────────────────
@@ -156,17 +153,31 @@ def _contexto_vivienda(arriendo_cobrado: float, dividendo_mensual: float, gastos
 
 
 def _claude_personal(prompt_usuario: str, nivel: str = "senior") -> str:
-    """Llama al agente con el system prompt de finanzas personales."""
-    if not _agente_disponible:
-        return "_Agente no disponible. Verifica ANTHROPIC_API_KEY en .env_"
+    """Llama a Claude (SDK anthropic directo) con el system prompt de finanzas.
+
+    Standalone — no depende de módulos externos al repo. El parámetro 'nivel'
+    se mantiene por compatibilidad de firma pero no altera el system prompt.
+    Retorna texto, o un string que empieza con '_error' / '⚠️' si falla — así
+    consulta_libre y los análisis multi-LLM detectan el fallo y hacen fallback.
+    """
+    if not _HAS_ANTHROPIC:
+        return "_error: SDK anthropic no instalado_"
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return "_error: ANTHROPIC_API_KEY no configurada_"
+
+    system = _SYSTEM_PERSONAL + _CONTEXTO_CHILE
     ultimo_error = None
     for intento in range(2):
         try:
-            return _claude(
-                system=_SYSTEM_PERSONAL + _CONTEXTO_CHILE,
-                user=prompt_usuario,
-                nivel=nivel,
+            client = _anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1500,
+                system=system,
+                messages=[{"role": "user", "content": prompt_usuario}],
             )
+            return msg.content[0].text.strip()
         except Exception as e:
             ultimo_error = e
             err = str(e).lower()
@@ -178,8 +189,8 @@ def _claude_personal(prompt_usuario: str, nivel: str = "senior") -> str:
                 continue
             if es_sobrecarga:
                 return "_Claude temporalmente sobrecargado. Probando fallback._"
-            return f"_Error al consultar el agente: {e}_"
-    return f"_Error al consultar el agente: {ultimo_error}_"
+            return f"_error al consultar el agente: {e}_"
+    return f"_error al consultar el agente: {ultimo_error}_"
 
 
 def _openai_personal(prompt_usuario: str) -> str | None:
@@ -760,5 +771,13 @@ def limpiar_cache_ai():
 
 
 def agente_disponible() -> bool:
-    """Retorna True si el agente está disponible y tiene API key."""
-    return _agente_disponible and bool(os.getenv("ANTHROPIC_API_KEY"))
+    """True si hay al menos una API key de IA configurada (Claude/OpenAI/Gemini).
+
+    consulta_libre y los análisis tienen fallback en cadena, así que cualquier
+    proveedor configurado habilita el asistente.
+    """
+    return bool(
+        os.getenv("ANTHROPIC_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+    )
