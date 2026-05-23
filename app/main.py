@@ -3550,7 +3550,7 @@ elif pagina == "⚙️ Ajustes":
             help="Cualquier otro ingreso recurrente"
         )
 
-    total_calc = nuevo_sueldo + nuevo_amipass + nuevo_arriendo + nuevo_ingreso_variable + nuevo_bono + nuevo_otros_ingresos
+    total_calc = nuevo_sueldo + nuevo_anticipo + nuevo_amipass + nuevo_arriendo + nuevo_ingreso_variable + nuevo_bono + nuevo_otros_ingresos
     st.metric("Total ingresos calculado", fmt_clp(total_calc))
 
     st.markdown("---")
@@ -3648,39 +3648,61 @@ elif pagina == "⚙️ Ajustes":
         set_cfg("precio_usdt_clp", nuevo_usdt)
         set_cfg("excel_path", nueva_ruta)
         # Persistir en .env para que sobrevivan reinicios
-        _env_path = Path(__file__).parent.parent.parent / ".env"
-        _lineas = _env_path.read_text(encoding="utf-8").splitlines()
-        _env_map = {
-            "EXCEL_FP_PATH":       nueva_ruta,
-            "LIQUIDACIONES_PATH":  nueva_ruta_liq,
-            "SUELDO_LIQUIDO":      str(nuevo_sueldo),
-            "ANTICIPO":            str(nuevo_anticipo),
-            "AMIPASS":             str(nuevo_amipass),
-            "ARRIENDO_COBRADO":    str(nuevo_arriendo),
-            "INGRESO_VARIABLE":    str(nuevo_ingreso_variable),
-            "BONO_MENSUAL":        str(nuevo_bono),
-            "OTROS_INGRESOS":      str(nuevo_otros_ingresos),
-            "AFP_SALDO":           str(nuevo_afp_saldo),
-            "AFP_APORTE_MENSUAL":  str(nuevo_aporte_afp),
-            "AFC_SALDO":           str(nuevo_afc_saldo),
-            "AFC_APORTE_MENSUAL":  str(nuevo_afc_aporte),
-            "ISAPRE_MENSUAL":      str(nuevo_isapre),
-            "DIVIDENDO_MENSUAL":   str(nuevo_dividendo),
-        }
-        _nuevas = []
-        _escritas = set()
-        for _l in _lineas:
-            _k = _l.split("=")[0] if "=" in _l else ""
-            if _k in _env_map:
-                _nuevas.append(f"{_k}={_env_map[_k]}")
-                _escritas.add(_k)
-            else:
-                _nuevas.append(_l)
-        for _k, _v in _env_map.items():
-            if _k not in _escritas:
-                _nuevas.append(f"{_k}={_v}")
-        _env_path.write_text("\n".join(_nuevas), encoding="utf-8")
-        st.success("✅ Configuración guardada — actualizada en .env (permanente).")
+        from data_source import USANDO_SUPABASE
+        if USANDO_SUPABASE:
+            import supabase_repo as _sr
+            _sr.guardar_config_bulk({
+                "sueldo_liquido":    nuevo_sueldo,
+                "anticipo":          nuevo_anticipo,
+                "amipass":           nuevo_amipass,
+                "arriendo_cobrado":  nuevo_arriendo,
+                "ingreso_variable":  nuevo_ingreso_variable,
+                "bono_mensual":      nuevo_bono,
+                "otros_ingresos":    nuevo_otros_ingresos,
+                "total_ingresos":    total_calc,
+                "afp_saldo":         nuevo_afp_saldo,
+                "afp_aporte_mensual":nuevo_aporte_afp,
+                "afc_saldo":         nuevo_afc_saldo,
+                "afc_aporte_mensual":nuevo_afc_aporte,
+                "isapre_mensual":    nuevo_isapre,
+                "dividendo_mensual": nuevo_dividendo,
+                "precio_usdt_clp":   nuevo_usdt,
+            })
+            st.success("✅ Configuración guardada en Supabase (permanente en todos los dispositivos).")
+        else:
+            _env_path = Path(__file__).parent.parent.parent / ".env"
+            _lineas = _env_path.read_text(encoding="utf-8").splitlines()
+            _env_map = {
+                "EXCEL_FP_PATH":       nueva_ruta,
+                "LIQUIDACIONES_PATH":  nueva_ruta_liq,
+                "SUELDO_LIQUIDO":      str(nuevo_sueldo),
+                "ANTICIPO":            str(nuevo_anticipo),
+                "AMIPASS":             str(nuevo_amipass),
+                "ARRIENDO_COBRADO":    str(nuevo_arriendo),
+                "INGRESO_VARIABLE":    str(nuevo_ingreso_variable),
+                "BONO_MENSUAL":        str(nuevo_bono),
+                "OTROS_INGRESOS":      str(nuevo_otros_ingresos),
+                "AFP_SALDO":           str(nuevo_afp_saldo),
+                "AFP_APORTE_MENSUAL":  str(nuevo_aporte_afp),
+                "AFC_SALDO":           str(nuevo_afc_saldo),
+                "AFC_APORTE_MENSUAL":  str(nuevo_afc_aporte),
+                "ISAPRE_MENSUAL":      str(nuevo_isapre),
+                "DIVIDENDO_MENSUAL":   str(nuevo_dividendo),
+            }
+            _nuevas = []
+            _escritas = set()
+            for _l in _lineas:
+                _k = _l.split("=")[0] if "=" in _l else ""
+                if _k in _env_map:
+                    _nuevas.append(f"{_k}={_env_map[_k]}")
+                    _escritas.add(_k)
+                else:
+                    _nuevas.append(_l)
+            for _k, _v in _env_map.items():
+                if _k not in _escritas:
+                    _nuevas.append(f"{_k}={_v}")
+            _env_path.write_text("\n".join(_nuevas), encoding="utf-8")
+            st.success("✅ Configuración guardada — actualizada en .env (permanente).")
         st.cache_data.clear()
 
     st.markdown("---")

@@ -51,8 +51,34 @@ DEFAULTS = {
 }
 
 
+_SUPABASE_KEYS = {
+    "sueldo_liquido", "anticipo", "amipass", "arriendo_cobrado",
+    "ingreso_variable", "bono_mensual", "otros_ingresos", "total_ingresos",
+    "afp_saldo", "afp_aporte_mensual", "afc_saldo", "afc_aporte_mensual",
+    "isapre_mensual", "dividendo_mensual", "precio_usdt_clp",
+}
+
+
 def init_config():
-    """Inicializa valores en session_state si no existen."""
+    """Inicializa valores en session_state. Con DATA_SOURCE=supabase carga
+    desde config_usuario la primera vez en la sesión; luego usa defaults."""
+    if not st.session_state.get("_cfg_supabase_loaded", False):
+        st.session_state["_cfg_supabase_loaded"] = True
+        try:
+            from data_source import USANDO_SUPABASE
+            if USANDO_SUPABASE:
+                from supabase_repo import cargar_config, is_available
+                if is_available():
+                    cfg_remota = cargar_config()
+                    for key, val in cfg_remota.items():
+                        if key in _SUPABASE_KEYS and key in DEFAULTS:
+                            try:
+                                st.session_state[f"cfg_{key}"] = type(DEFAULTS[key])(val)
+                            except (TypeError, ValueError):
+                                pass
+        except Exception:
+            pass
+
     for key, val in DEFAULTS.items():
         if f"cfg_{key}" not in st.session_state:
             st.session_state[f"cfg_{key}"] = val
