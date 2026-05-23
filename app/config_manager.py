@@ -73,6 +73,7 @@ def calc_total_ingresos() -> float:
     """Calcula total ingresos con todos los valores actuales de configuración."""
     return (
         get_cfg("sueldo_liquido")
+        + get_cfg("anticipo")
         + get_cfg("amipass")
         + get_cfg("arriendo_cobrado")
         + get_cfg("ingreso_variable")
