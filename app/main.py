@@ -3756,6 +3756,10 @@ elif pagina == "⚙️ Ajustes":
             st.rerun()
 
     st.markdown("---")
+    if _en_nube:
+        st.info("🚧 **Scraping Bancario y Fintoc Open Banking** — En construcción para la versión web. Disponibles en la versión local (escritorio).")
+        st.stop()
+
     st.subheader("🏦 Scraping Bancario")
     st.caption("Extrae movimientos directamente desde el portal de tu banco. Las credenciales se leen desde .env — nunca se muestran ni se guardan en la app.")
 
