@@ -130,10 +130,10 @@ def cargar_transacciones(ruta_str: str = None) -> pd.DataFrame:
 
     try:
         resp = (
-            client.table("transacciones")
-            .select("fecha, tipo_tx, grupo, concepto, detalle, importe, cuenta")
+            client.table("Control_gastos")
+            .select("fecha_date, tipo_tx, grupo, concepto, detalle, importe, forma_pago")
             .eq("user_id", uid)
-            .order("fecha", desc=False)
+            .order("fecha_date", desc=False)
             .execute()
         )
     except Exception:
@@ -144,6 +144,8 @@ def cargar_transacciones(ruta_str: str = None) -> pd.DataFrame:
         return pd.DataFrame(columns=_TX_COLS)
 
     df = pd.DataFrame(filas)
+    # Normalizar nombres al esquema interno del app
+    df = df.rename(columns={"fecha_date": "fecha", "forma_pago": "cuenta"})
     df["fecha"] = pd.to_datetime(df["fecha"], errors="coerce")
     df["mes"] = df["fecha"].dt.month.fillna(1).astype(int)
     df["mes_nombre"] = df["mes"].map(NOMBRES_MESES).fillna("")
@@ -257,25 +259,27 @@ def insertar_transacciones(df: pd.DataFrame, fuente: str = "manual") -> int:
     for _, row in df.iterrows():
         detalle = row.get("detalle", row.get("descripcion", ""))
         importe = row.get("importe", row.get("monto", 0))
+        # cuenta → forma_pago (nombre en Control_gastos)
+        forma_pago = str(row.get("cuenta", row.get("forma_pago", "")) or "").strip()
         registros.append({
-            "user_id":  uid,
-            "fecha":    _fecha_iso(row.get("fecha")),
-            "tipo_tx":  str(row.get("tipo_tx", "Gasto")).strip() or "Gasto",
-            "grupo":    str(row.get("grupo", "Varios y Otros")).strip() or "Varios y Otros",
-            "concepto": str(row.get("concepto", "") or "").strip(),
-            "detalle":  str(detalle or "").strip(),
-            "importe":  abs(float(importe or 0)),
-            "cuenta":   str(row.get("cuenta", "") or "").strip(),
-            "fuente":   fuente,
+            "user_id":    uid,
+            "fecha_date": _fecha_iso(row.get("fecha")),
+            "tipo_tx":    str(row.get("tipo_tx", "Gasto")).strip() or "Gasto",
+            "grupo":      str(row.get("grupo", "Varios y Otros")).strip() or "Varios y Otros",
+            "concepto":   str(row.get("concepto", "") or "").strip(),
+            "detalle":    str(detalle or "").strip(),
+            "importe":    abs(float(importe or 0)),
+            "forma_pago": forma_pago,
+            "fuente":     fuente,
         })
-    registros = [r for r in registros if r["fecha"] and r["importe"] > 0]
+    registros = [r for r in registros if r["fecha_date"] and r["importe"] > 0]
     if not registros:
         return 0
 
     total = 0
-    for i in range(0, len(registros), 500):  # batches de 500
+    for i in range(0, len(registros), 500):
         chunk = registros[i:i + 500]
-        client.table("transacciones").insert(chunk).execute()
+        client.table("Control_gastos").insert(chunk).execute()
         total += len(chunk)
     return total
 
@@ -283,16 +287,21 @@ def insertar_transacciones(df: pd.DataFrame, fuente: str = "manual") -> int:
 def actualizar_transaccion(tx_id: int, campos: dict) -> bool:
     """Actualiza campos de una transacción del usuario activo."""
     client, uid = _require()
-    permitidos = {"fecha", "tipo_tx", "grupo", "concepto", "detalle", "importe", "cuenta", "fuente"}
+    permitidos = {"fecha_date", "fecha", "tipo_tx", "grupo", "concepto", "detalle", "importe", "forma_pago", "cuenta", "fuente"}
     payload = {k: v for k, v in campos.items() if k in permitidos}
+    # Normalizar nombres al esquema de Control_gastos
     if "fecha" in payload:
-        payload["fecha"] = _fecha_iso(payload["fecha"])
+        payload["fecha_date"] = _fecha_iso(payload.pop("fecha"))
+    if "fecha_date" in payload:
+        payload["fecha_date"] = _fecha_iso(payload["fecha_date"])
+    if "cuenta" in payload:
+        payload["forma_pago"] = payload.pop("cuenta")
     if "importe" in payload:
         payload["importe"] = abs(float(payload["importe"] or 0))
     if not payload:
         return False
     try:
-        client.table("transacciones").update(payload).eq("id", tx_id).eq("user_id", uid).execute()
+        client.table("Control_gastos").update(payload).eq("id", tx_id).eq("user_id", uid).execute()
         return True
     except Exception:
         return False
@@ -302,7 +311,7 @@ def eliminar_transaccion(tx_id: int) -> bool:
     """Elimina una transacción del usuario activo."""
     client, uid = _require()
     try:
-        client.table("transacciones").delete().eq("id", tx_id).eq("user_id", uid).execute()
+        client.table("Control_gastos").delete().eq("id", tx_id).eq("user_id", uid).execute()
         return True
     except Exception:
         return False
@@ -398,7 +407,7 @@ def resetear_datos_usuario(confirmar: bool = False) -> dict:
         raise RuntimeError("resetear_datos_usuario requiere confirmar=True")
     client, uid = _require()
     out = {}
-    for tabla in ("transacciones", "patrimonio", "categorias", "config_usuario"):
+    for tabla in ("Control_gastos", "patrimonio", "categorias", "config_usuario"):
         client.table(tabla).delete().eq("user_id", uid).execute()
         out[tabla] = "borrado"
     return out
