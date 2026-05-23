@@ -2492,6 +2492,21 @@ elif pagina == "🏛️ AFP y Previsión":
 # PÁGINA: IMPORTAR BANCO
 # ═══════════════════════════════════════════════════════════════════════════════
 elif pagina == "🏧 Importar Banco":
+    st.title("🏧 Importar Archivo de Banco")
+
+    if Path("/mount/src").exists():
+        st.info("🚧 **En construcción** — Esta función estará disponible próximamente en la versión web.")
+        st.markdown("""
+        Las siguientes opciones se están adaptando para funcionar en la nube:
+
+        - **Opción A** — Subir Excel del banco (cartola)
+        - **Opción B** — Scraping automático BancoEstado / BCI
+        - **Opción C** — Fintoc Open Banking
+
+        Por ahora, registra tus movimientos desde el bot **@GastoDiaBot** en Telegram.
+        """)
+        st.stop()
+
     import tempfile
     from bank_importer import (
         parsear_archivo_banco,
@@ -2503,8 +2518,6 @@ elif pagina == "🏧 Importar Banco":
         cargar_reglas,
         deduplicar_transacciones,
     )
-
-    st.title("🏧 Importar Archivo de Banco")
     st.caption("Sube cartolas o estados de cuenta → el sistema categoriza usando tu historial Excel + patrones inteligentes")
 
     _excel_path = Path(get_cfg("excel_path"))
