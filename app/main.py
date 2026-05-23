@@ -3603,30 +3603,34 @@ elif pagina == "⚙️ Ajustes":
     st.markdown("---")
     st.subheader("📁 Rutas de Archivos")
 
-    nueva_ruta_liq = st.text_input(
-        "Carpeta de Liquidaciones PDF",
-        value=get_cfg("liquidaciones_carpeta"),
-        help="Carpeta donde están tus liquidaciones de sueldo en PDF",
-    )
-    if nueva_ruta_liq:
-        from pathlib import Path as _Path
-        if _Path(nueva_ruta_liq).exists():
-            pdfs = list(_Path(nueva_ruta_liq).glob("Liquidacion_contrato_*.pdf"))
-            st.success(f"✅ Carpeta válida — {len(pdfs)} liquidaciones detectadas")
-        else:
-            st.error("Carpeta no encontrada.")
+    _en_nube = Path("/mount/src").exists()
+    if _en_nube:
+        st.info("📁 Rutas de archivos disponibles solo en la versión local (escritorio). En la nube los datos vienen de Supabase.")
+        nueva_ruta_liq = get_cfg("liquidaciones_carpeta")
+        nueva_ruta = get_cfg("excel_path")
+    else:
+        nueva_ruta_liq = st.text_input(
+            "Carpeta de Liquidaciones PDF",
+            value=get_cfg("liquidaciones_carpeta"),
+            help="Carpeta donde están tus liquidaciones de sueldo en PDF",
+        )
+        if nueva_ruta_liq:
+            if Path(nueva_ruta_liq).exists():
+                pdfs = list(Path(nueva_ruta_liq).glob("Liquidacion_contrato_*.pdf"))
+                st.success(f"✅ Carpeta válida — {len(pdfs)} liquidaciones detectadas")
+            else:
+                st.error("Carpeta no encontrada.")
 
-    nueva_ruta = st.text_input(
-        "Ruta del archivo Excel (.xlsm)",
-        value=get_cfg("excel_path"),
-        help="Configura también en .env como EXCEL_FP_PATH"
-    )
-    if nueva_ruta:
-        from pathlib import Path as _Path
-        if _Path(nueva_ruta).exists():
-            st.success(f"Archivo encontrado: {_Path(nueva_ruta).name}")
-        else:
-            st.error("Archivo no encontrado. Verifica la ruta.")
+        nueva_ruta = st.text_input(
+            "Ruta del archivo Excel (.xlsm)",
+            value=get_cfg("excel_path"),
+            help="Configura también en .env como EXCEL_FP_PATH"
+        )
+        if nueva_ruta:
+            if Path(nueva_ruta).exists():
+                st.success(f"Archivo encontrado: {Path(nueva_ruta).name}")
+            else:
+                st.error("Archivo no encontrado. Verifica la ruta.")
 
     st.markdown("---")
     if st.button("💾 Guardar configuración"):
