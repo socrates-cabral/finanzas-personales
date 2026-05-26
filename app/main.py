@@ -3512,6 +3512,8 @@ elif pagina == "🎯 Simulador":
 
 elif pagina == "⚙️ Ajustes":
     st.title("⚙️ Ajustes y Configuración")
+    if "_cfg_source" in st.session_state:
+        st.caption(f"🔧 Config cargada desde: {st.session_state['_cfg_source']}")
 
     st.subheader("💵 Ingresos Mensuales")
     col1, col2 = st.columns(2)
@@ -3686,7 +3688,8 @@ elif pagina == "⚙️ Ajustes":
                 "precio_usdt_clp":   nuevo_usdt,
             })
             st.success("✅ Configuración guardada en Supabase (permanente en todos los dispositivos).")
-        else:
+        # Respaldo local en .env (solo cuando el archivo existe — no aplica en Streamlit Cloud)
+        try:
             _env_path = Path(__file__).parent.parent.parent / ".env"
             _lineas = _env_path.read_text(encoding="utf-8").splitlines()
             _env_map = {
@@ -3719,7 +3722,10 @@ elif pagina == "⚙️ Ajustes":
                 if _k not in _escritas:
                     _nuevas.append(f"{_k}={_v}")
             _env_path.write_text("\n".join(_nuevas), encoding="utf-8")
-            st.success("✅ Configuración guardada — actualizada en .env (permanente).")
+            if not USANDO_SUPABASE:
+                st.success("✅ Configuración guardada — actualizada en .env (permanente).")
+        except FileNotFoundError:
+            pass  # Streamlit Cloud — sin .env local, Supabase es la única persistencia
         st.cache_data.clear()
 
     st.markdown("---")

@@ -30,6 +30,10 @@ __pycache__/
 .claude/worktrees/
 .claude/settings.local.json
 
+# ── n8n workflows (pueden tener API keys hardcodeadas) ───────────────────────
+Control_gastos_personal.json
+*.n8n.json
+
 # ── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

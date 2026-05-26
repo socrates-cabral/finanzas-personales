@@ -70,14 +70,21 @@ def init_config():
                 from supabase_repo import cargar_config, is_available
                 if is_available():
                     cfg_remota = cargar_config()
+                    loaded = 0
                     for key, val in cfg_remota.items():
                         if key in _SUPABASE_KEYS and key in DEFAULTS:
                             try:
                                 st.session_state[f"cfg_{key}"] = type(DEFAULTS[key])(val)
+                                loaded += 1
                             except (TypeError, ValueError):
                                 pass
-        except Exception:
-            pass
+                    st.session_state["_cfg_source"] = f"supabase ({loaded} claves)"
+                else:
+                    st.session_state["_cfg_source"] = "defaults (.env) — Supabase no disponible"
+            else:
+                st.session_state["_cfg_source"] = "defaults (.env) — modo Excel"
+        except Exception as e:
+            st.session_state["_cfg_source"] = f"defaults (.env) — error: {e}"
 
     for key, val in DEFAULTS.items():
         if f"cfg_{key}" not in st.session_state:
