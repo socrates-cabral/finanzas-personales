@@ -61,9 +61,14 @@ _SUPABASE_KEYS = {
 
 def init_config():
     """Inicializa valores en session_state. Con DATA_SOURCE=supabase carga
-    desde config_usuario la primera vez en la sesión; luego usa defaults."""
-    if not st.session_state.get("_cfg_supabase_loaded", False):
-        st.session_state["_cfg_supabase_loaded"] = True
+    desde config_usuario; recarga si el usuario autenticado cambia."""
+    # Recargar si el usuario cambió (login post-render) o si es la primera vez
+    current_uid = st.session_state.get("_auth_user_id", "")
+    already_loaded_for = st.session_state.get("_cfg_loaded_for_uid", "__never__")
+    needs_load = already_loaded_for != current_uid
+
+    if needs_load:
+        st.session_state["_cfg_loaded_for_uid"] = current_uid
         try:
             from data_source import USANDO_SUPABASE
             if USANDO_SUPABASE:

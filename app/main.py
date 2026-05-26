@@ -3660,24 +3660,28 @@ elif pagina == "⚙️ Ajustes":
         from data_source import USANDO_SUPABASE
         if USANDO_SUPABASE:
             import supabase_repo as _sr
-            _sr.guardar_config_bulk({
-                "sueldo_liquido":    nuevo_sueldo,
-                "anticipo":          nuevo_anticipo,
-                "amipass":           nuevo_amipass,
-                "arriendo_cobrado":  nuevo_arriendo,
-                "ingreso_variable":  nuevo_ingreso_variable,
-                "bono_mensual":      nuevo_bono,
-                "otros_ingresos":    nuevo_otros_ingresos,
-                "total_ingresos":    total_calc,
-                "afp_saldo":         nuevo_afp_saldo,
-                "afp_aporte_mensual":nuevo_aporte_afp,
-                "afc_saldo":         nuevo_afc_saldo,
-                "afc_aporte_mensual":nuevo_afc_aporte,
-                "isapre_mensual":    nuevo_isapre,
-                "dividendo_mensual": nuevo_dividendo,
-                "precio_usdt_clp":   nuevo_usdt,
-            })
-            st.success("✅ Configuración guardada en Supabase (permanente en todos los dispositivos).")
+            try:
+                _saved = _sr.guardar_config_bulk({
+                    "sueldo_liquido":    nuevo_sueldo,
+                    "anticipo":          nuevo_anticipo,
+                    "amipass":           nuevo_amipass,
+                    "arriendo_cobrado":  nuevo_arriendo,
+                    "ingreso_variable":  nuevo_ingreso_variable,
+                    "bono_mensual":      nuevo_bono,
+                    "otros_ingresos":    nuevo_otros_ingresos,
+                    "total_ingresos":    total_calc,
+                    "afp_saldo":         nuevo_afp_saldo,
+                    "afp_aporte_mensual":nuevo_aporte_afp,
+                    "afc_saldo":         nuevo_afc_saldo,
+                    "afc_aporte_mensual":nuevo_afc_aporte,
+                    "isapre_mensual":    nuevo_isapre,
+                    "dividendo_mensual": nuevo_dividendo,
+                    "precio_usdt_clp":   nuevo_usdt,
+                })
+                st.session_state["_cfg_source"] = f"supabase ({_saved} claves)"
+                st.success(f"✅ Configuración guardada en Supabase ({_saved} claves).")
+            except Exception as _exc:
+                st.error(f"❌ Error al guardar en Supabase: {_exc}")
         # Respaldo local en .env (solo cuando el archivo existe — no aplica en Streamlit Cloud)
         try:
             _env_path = Path(__file__).parent.parent.parent / ".env"

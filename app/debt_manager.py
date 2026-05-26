@@ -189,12 +189,11 @@ def actualizar_deuda(deuda_id: str, **campos) -> bool:
 
 
 def reemplazar_deudas_cmf(nuevas: list, fecha_pdf: str = "") -> int:
-    """Elimina todas las deudas importadas desde CMF y guarda las nuevas.
-    Retorna la cantidad guardada. Usar al importar un PDF actualizado."""
-    existentes = obtener_deudas()
-    for d in existentes:
-        if "Importado PDF CMF" in d.get("descripcion", ""):
-            eliminar_deuda(d["id"])
+    """Elimina TODAS las deudas existentes y guarda las del nuevo PDF CMF.
+    El PDF CMF es la fuente de verdad para todas las deudas con instituciones.
+    Retorna la cantidad guardada."""
+    for d in obtener_deudas():
+        eliminar_deuda(d["id"])
     for d in nuevas:
         agregar_deuda(
             d["institucion"], d["tipo"], d["saldo_actual"],
