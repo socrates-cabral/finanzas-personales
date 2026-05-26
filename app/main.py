@@ -2494,18 +2494,7 @@ elif pagina == "🏛️ AFP y Previsión":
 elif pagina == "🏧 Importar Banco":
     st.title("🏧 Importar Archivo de Banco")
 
-    if Path("/mount/src").exists():
-        st.info("🚧 **En construcción** — Esta función estará disponible próximamente en la versión web.")
-        st.markdown("""
-        Las siguientes opciones se están adaptando para funcionar en la nube:
-
-        - **Opción A** — Subir Excel del banco (cartola)
-        - **Opción B** — Scraping automático BancoEstado / BCI
-        - **Opción C** — Fintoc Open Banking
-
-        Por ahora, registra tus movimientos desde el bot **@GastoDiaBot** en Telegram.
-        """)
-        st.stop()
+    _banco_en_nube = Path("/mount/src").exists()
 
     import tempfile
     from bank_importer import (
@@ -2527,16 +2516,18 @@ elif pagina == "🏧 Importar Banco":
     c1, c2, c3 = st.columns(3)
     c1.metric("Reglas en caché", len(_reglas_actuales), help="Transacciones ya categorizadas (historial + IA)")
     c2.metric("Bancos soportados", "5", help="BCI, BancoEstado, Itaú, Falabella, Consorcio")
-    c3.metric("Excel configurado", "✅" if _excel_path.exists() else "⚠️ No encontrado")
+    if not _banco_en_nube:
+        c3.metric("Excel configurado", "✅" if _excel_path.exists() else "⚠️ No encontrado")
 
-    if st.button("🔄 Reconstruir caché desde Excel", help="Lee tus 5+ meses de historial y regenera las reglas"):
-        if not _excel_path.exists():
-            st.error(f"Excel no encontrado: {_excel_path}")
-        else:
-            with st.spinner("Leyendo historial..."):
-                _stats = construir_cache_desde_excel(_excel_path, sobrescribir=True)
-            st.success(f"Caché reconstruida: {_stats['leidas']} filas leídas → {_stats['nuevas']} reglas nuevas | Total: {_stats['total']}")
-            st.rerun()
+    if not _banco_en_nube:
+        if st.button("🔄 Reconstruir caché desde Excel", help="Lee tus 5+ meses de historial y regenera las reglas"):
+            if not _excel_path.exists():
+                st.error(f"Excel no encontrado: {_excel_path}")
+            else:
+                with st.spinner("Leyendo historial..."):
+                    _stats = construir_cache_desde_excel(_excel_path, sobrescribir=True)
+                st.success(f"Caché reconstruida: {_stats['leidas']} filas leídas → {_stats['nuevas']} reglas nuevas | Total: {_stats['total']}")
+                st.rerun()
 
     st.markdown("---")
 
@@ -2825,11 +2816,12 @@ elif pagina == "🏧 Importar Banco":
                 st.rerun()
 
     # ── Comparar con Excel ────────────────────────────────────────────────────
-    st.markdown("---")
-    st.subheader("Comparar con mi Excel")
-    st.caption("Cruza las transacciones contra tu historial Excel — match por mes + monto (±1 CLP)")
+    if not _banco_en_nube:
+        st.markdown("---")
+        st.subheader("Comparar con mi Excel")
+        st.caption("Cruza las transacciones contra tu historial Excel — match por mes + monto (±1 CLP)")
 
-    if st.button("🔍 Comparar con Excel", key="_btn_comparar"):
+    if not _banco_en_nube and st.button("🔍 Comparar con Excel", key="_btn_comparar"):
         if not _excel_path.exists():
             st.error(f"Excel no encontrado: {_excel_path}")
         else:
