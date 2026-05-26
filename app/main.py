@@ -64,6 +64,7 @@ from ai_insights import (
 )
 from debt_manager import (
     obtener_deudas, agregar_deuda, eliminar_deuda, actualizar_deuda,
+    reemplazar_deudas_cmf,
     resumen_deudas, estrategia_avalanche, estrategia_snowball,
     proyeccion_pago, alertas_tmc, parsear_informe_cmf, obtener_tmc_cmf,
     INSTITUCIONES, TIPOS_DEUDA,
@@ -2132,24 +2133,21 @@ elif pagina == "🏦 Deudas":
 
                         _cmf_inputs.append((d, tasa_m, cuota_m, meses_m))
 
-                # Botón "Guardar todas" al final
+                # Botón reemplazar — elimina CMF anteriores y guarda las del PDF nuevo
                 st.markdown("---")
-                n_pendientes = sum(1 for i in range(len(detectadas)) if not st.session_state.get(f"cmf_saved_{_cmf_key}_{i}", False))
-                if n_pendientes > 0:
-                    if st.button(f"💾 Guardar todas ({n_pendientes} pendiente{'s' if n_pendientes > 1 else ''})"):
-                        guardadas = 0
+                _ya_reemplazado = st.session_state.get(f"cmf_reemplazado_{_cmf_key}", False)
+                if not _ya_reemplazado:
+                    st.info("⚠️ **Reemplazar** elimina las deudas CMF anteriores y guarda las de este PDF. Úsalo al actualizar mes a mes.")
+                    if st.button(f"🔄 Reemplazar deudas CMF con este PDF ({len(detectadas)} deudas)", type="primary"):
+                        _nuevas_con_tasas = []
                         for i, (d, tasa_m, cuota_m, meses_m) in enumerate(_cmf_inputs):
-                            if not st.session_state.get(f"cmf_saved_{_cmf_key}_{i}", False):
-                                agregar_deuda(
-                                    d["institucion"], d["tipo"], d["saldo_actual"],
-                                    tasa_m, cuota_m, meses_m,
-                                    f"Importado PDF CMF {fecha}"
-                                )
-                                st.session_state[f"cmf_saved_{_cmf_key}_{i}"] = True
-                                guardadas += 1
+                            _nuevas_con_tasas.append({**d, "tasa_mensual": tasa_m, "cuota_mensual": cuota_m, "meses_restantes": meses_m})
+                        reemplazar_deudas_cmf(_nuevas_con_tasas, fecha)
+                        st.session_state[f"cmf_reemplazado_{_cmf_key}"] = True
+                        st.cache_data.clear()
                         st.rerun()
                 else:
-                    st.success("✅ Todas las deudas del PDF han sido guardadas.")
+                    st.success(f"✅ Deudas CMF reemplazadas con el PDF del {fecha}.")
 
                 # Líneas de crédito disponibles
                 if lineas:

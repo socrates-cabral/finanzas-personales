@@ -45,27 +45,87 @@ TMC_REFERENCIA = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CRUD DEUDAS
+#  CRUD DEUDAS — file (local) o Supabase según DATA_SOURCE
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _cargar() -> list:
+def _usando_supabase() -> bool:
+    try:
+        from data_source import USANDO_SUPABASE
+        return USANDO_SUPABASE
+    except Exception:
+        return False
+
+
+def _sb():
+    """Devuelve (client, user_id) desde supabase_repo o (None, None)."""
+    try:
+        import supabase_repo
+        c = supabase_repo._get_client()
+        u = supabase_repo.get_active_user()
+        return c, u
+    except Exception:
+        return None, None
+
+
+# ── Backends ──────────────────────────────────────────────────────────────────
+
+def _sb_obtener() -> list:
+    c, uid = _sb()
+    if not c or not uid:
+        return []
+    try:
+        resp = c.table("deudas").select("*").eq("user_id", uid).order("fecha_registro").execute()
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def _sb_insertar(deuda: dict, user_id: str) -> bool:
+    c, _ = _sb()
+    if not c:
+        return False
+    try:
+        row = {**deuda, "user_id": user_id}
+        c.table("deudas").insert(row).execute()
+        return True
+    except Exception:
+        return False
+
+
+def _sb_eliminar(deuda_id: str) -> bool:
+    c, uid = _sb()
+    if not c or not uid:
+        return False
+    try:
+        c.table("deudas").delete().eq("id", deuda_id).eq("user_id", uid).execute()
+        return True
+    except Exception:
+        return False
+
+
+def _sb_actualizar(deuda_id: str, campos: dict) -> bool:
+    c, uid = _sb()
+    if not c or not uid:
+        return False
+    try:
+        c.table("deudas").update(campos).eq("id", deuda_id).eq("user_id", uid).execute()
+        return True
+    except Exception:
+        return False
+
+
+# ── Interfaz pública ──────────────────────────────────────────────────────────
+
+def obtener_deudas() -> list:
+    """Retorna lista de deudas guardadas."""
+    if _usando_supabase():
+        return _sb_obtener()
     if _DEUDAS_FILE.exists():
         try:
             return json.loads(_DEUDAS_FILE.read_text(encoding="utf-8"))
         except Exception:
             pass
     return []
-
-
-def _guardar(deudas: list):
-    _DEUDAS_FILE.write_text(
-        json.dumps(deudas, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-
-
-def obtener_deudas() -> list:
-    """Retorna lista de deudas guardadas."""
-    return _cargar()
 
 
 def agregar_deuda(
@@ -78,43 +138,71 @@ def agregar_deuda(
     descripcion: str = "",
 ) -> dict:
     """Agrega una deuda nueva. Retorna el dict guardado."""
-    deudas = _cargar()
     nueva = {
         "id": f"deuda_{uuid.uuid4().hex[:12]}",
         "institucion": institucion,
         "tipo": tipo,
         "saldo_actual": saldo_actual,
-        "tasa_mensual": tasa_mensual,       # % mensual
+        "tasa_mensual": tasa_mensual,
         "tasa_anual": round(tasa_mensual * 12, 2),
         "cuota_mensual": cuota_mensual,
         "meses_restantes": meses_restantes,
         "descripcion": descripcion,
         "fecha_registro": datetime.now().isoformat(),
     }
-    deudas.append(nueva)
-    _guardar(deudas)
+    if _usando_supabase():
+        _, uid = _sb()
+        if uid:
+            _sb_insertar(nueva, uid)
+    else:
+        deudas = obtener_deudas()
+        deudas.append(nueva)
+        _DEUDAS_FILE.write_text(json.dumps(deudas, ensure_ascii=False, indent=2), encoding="utf-8")
     return nueva
 
 
 def eliminar_deuda(deuda_id: str) -> bool:
-    deudas = _cargar()
+    if _usando_supabase():
+        return _sb_eliminar(deuda_id)
+    deudas = obtener_deudas()
     nuevas = [d for d in deudas if d["id"] != deuda_id]
     if len(nuevas) == len(deudas):
         return False
-    _guardar(nuevas)
+    _DEUDAS_FILE.write_text(json.dumps(nuevas, ensure_ascii=False, indent=2), encoding="utf-8")
     return True
 
 
 def actualizar_deuda(deuda_id: str, **campos) -> bool:
-    deudas = _cargar()
+    if _usando_supabase():
+        if "tasa_mensual" in campos:
+            campos["tasa_anual"] = round(campos["tasa_mensual"] * 12, 2)
+        return _sb_actualizar(deuda_id, campos)
+    deudas = obtener_deudas()
     for d in deudas:
         if d["id"] == deuda_id:
             d.update(campos)
             if "tasa_mensual" in campos:
                 d["tasa_anual"] = round(campos["tasa_mensual"] * 12, 2)
-            _guardar(deudas)
+            _DEUDAS_FILE.write_text(json.dumps(deudas, ensure_ascii=False, indent=2), encoding="utf-8")
             return True
     return False
+
+
+def reemplazar_deudas_cmf(nuevas: list, fecha_pdf: str = "") -> int:
+    """Elimina todas las deudas importadas desde CMF y guarda las nuevas.
+    Retorna la cantidad guardada. Usar al importar un PDF actualizado."""
+    existentes = obtener_deudas()
+    for d in existentes:
+        if "Importado PDF CMF" in d.get("descripcion", ""):
+            eliminar_deuda(d["id"])
+    for d in nuevas:
+        agregar_deuda(
+            d["institucion"], d["tipo"], d["saldo_actual"],
+            d.get("tasa_mensual", 0), d.get("cuota_mensual", 0),
+            d.get("meses_restantes", 0),
+            f"Importado PDF CMF {fecha_pdf}".strip(),
+        )
+    return len(nuevas)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

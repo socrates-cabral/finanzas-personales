@@ -111,8 +111,31 @@ drop trigger if exists trg_config_updated on public.config_usuario;
 create trigger trg_config_updated before update on public.config_usuario
     for each row execute function public.set_updated_at();
 
+-- ── deudas ──────────────────────────────────────────────────────────
+-- Una fila por deuda activa. Importadas desde PDF CMF o ingresadas manual.
+create table if not exists public.deudas (
+    id              text primary key,                      -- deuda_<hex12>
+    user_id         uuid not null references auth.users(id) on delete cascade default auth.uid(),
+    institucion     text not null,
+    tipo            text not null,
+    saldo_actual    numeric(14,2) not null default 0,
+    tasa_mensual    numeric(8,4) not null default 0,       -- % mensual
+    tasa_anual      numeric(8,4) not null default 0,       -- % anual = tasa_mensual * 12
+    cuota_mensual   numeric(14,2) not null default 0,
+    meses_restantes integer not null default 0,
+    descripcion     text default '',
+    fecha_registro  timestamptz not null default now()
+);
+alter table public.deudas enable row level security;
+
+drop policy if exists "own_rows" on public.deudas;
+create policy "own_rows" on public.deudas
+    for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create index if not exists idx_deudas_user on public.deudas(user_id);
+
 -- ══════════════════════════════════════════════════════════════════
--- FIN — Tablas: transacciones, patrimonio, categorias, config_usuario
+-- FIN — Tablas: transacciones, patrimonio, categorias, config_usuario, deudas
 -- Todas con RLS activo. La migración (servicio backend con service_role
 -- key) debe pasar user_id explícito porque auth.uid() es null fuera de
 -- una sesión autenticada.
