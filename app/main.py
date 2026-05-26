@@ -2275,12 +2275,25 @@ elif pagina == "₿ Inversiones":
 
         # ── Tabla saldos ──────────────────────────────────────────────────────
         st.subheader("📋 Saldos en Kraken" if fuente == "Kraken" else "📋 Portafolio Excel")
+        def _fmt_qty(v):
+            if not isinstance(v, (int, float)):
+                return str(v)
+            if v >= 1_000:
+                return f"{v:,.2f}"
+            if v >= 1:
+                return f"{v:,.4f}"
+            if v >= 0.0001:
+                return f"{v:.6f}"
+            return f"{v:.2e}"
+
         df_tabla = df_port[df_port["valor_clp"] > 0].copy()
         df_tabla["valor_usd"] = df_tabla["valor_clp"] / usd_clp
         df_tabla["pct_port"]  = df_tabla["valor_clp"] / total_clp * 100
         df_show = df_tabla[["activo","cantidad","precio_actual_clp","valor_clp","valor_usd","pct_port","change_24h"]].copy()
         df_show.columns = ["Activo","Cantidad","Precio CLP","Valor CLP","Valor USD","% Portafolio","24h %"]
-        _bi_table(df_show, money_cols=["Precio CLP","Valor CLP","Valor USD"], pct_cols=["% Portafolio","24h %"])
+        df_show["Cantidad"] = df_show["Cantidad"].apply(_fmt_qty)
+        _bi_table(df_show, money_cols=["Precio CLP","Valor CLP","Valor USD"], pct_cols=["% Portafolio","24h %"],
+                  right_cols=["Cantidad"])
 
         st.markdown("---")
 
