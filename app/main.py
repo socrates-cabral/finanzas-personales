@@ -2278,12 +2278,15 @@ elif pagina == "₿ Inversiones":
         def _fmt_qty(v):
             if not isinstance(v, (int, float)):
                 return str(v)
+            def _cl(s):
+                # punto → X, coma → punto (miles), X → coma (decimal)
+                return s.replace(".", "X").replace(",", ".").replace("X", ",")
             if v >= 1_000:
-                return f"{v:,.2f}"
+                return _cl(f"{v:,.2f}")
             if v >= 1:
-                return f"{v:,.4f}"
+                return _cl(f"{v:,.4f}")
             if v >= 0.0001:
-                return f"{v:.6f}"
+                return f"{v:.6f}".replace(".", ",")
             return f"{v:.2e}"
 
         df_tabla = df_port[df_port["valor_clp"] > 0].copy()
