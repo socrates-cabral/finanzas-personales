@@ -2266,10 +2266,10 @@ elif pagina == "₿ Inversiones":
         rew_clp     = rew_usdt * usd_clp
 
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("💼 Portafolio Total", fmt_clp(total_clp), delta=f"USD {total_usd:,.0f}")
+        k1.metric("💼 Portafolio Total", fmt_clp(total_clp), delta=f"USD {total_usd:,.0f}".replace(",", "."))
         k2.metric("🔢 Activos", str(len(df_port[df_port["valor_clp"] > 0])))
         k3.metric("🎁 Recompensas USDT (90d)", f"{rew_usdt:.2f} USDT", delta=fmt_clp(rew_clp))
-        k4.metric("💱 USD/CLP", f"${usd_clp:,.0f}")
+        k4.metric("💱 USD/CLP", f"${usd_clp:,.0f}".replace(",", "."))
 
         st.markdown("---")
 
