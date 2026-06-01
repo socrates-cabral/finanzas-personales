@@ -26,6 +26,7 @@ from pathlib import Path
 from datetime import datetime, date
 
 import pandas as pd
+import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env")
@@ -414,8 +415,10 @@ def resetear_datos_usuario(confirmar: bool = False) -> dict:
     return out
 
 
-def cargar_ingresos_reales_mes(mes: int, anio: int) -> float:
+@st.cache_data(ttl=300)
+def cargar_ingresos_reales_mes(mes: int, anio: int, uid: str = "") -> float:
     """Suma importe de filas tipo_tx='Ingreso' del mes/anio dado.
+    uid solo actúa como cache-key discriminador por usuario; el cuerpo usa _require().
     Retorna 0.0 si no hay datos o Supabase no disponible."""
     try:
         client, uid = _require()
@@ -435,13 +438,15 @@ def cargar_ingresos_reales_mes(mes: int, anio: int) -> float:
             .lte("fecha_date", fecha_fin)
             .execute()
         )
-        return float(sum(r["importe"] for r in (resp.data or [])))
+        return float(sum(float(r.get("importe") or 0) for r in (resp.data or [])))
     except Exception:
         return 0.0
 
 
-def cargar_config_mensual(mes: int, anio: int) -> dict:
+@st.cache_data(ttl=300)
+def cargar_config_mensual(mes: int, anio: int, uid: str = "") -> dict:
     """Lee override de ingresos para el mes/anio dado desde config_ingresos_mensual.
+    uid solo actúa como cache-key discriminador por usuario; el cuerpo usa _require().
     Retorna dict con claves de ingreso o {} si no hay fila para ese mes."""
     try:
         client, uid = _require()

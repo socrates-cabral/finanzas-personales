@@ -903,7 +903,13 @@ df_tx_oper = filtrar_transacciones_operativas(df_tx, incluir_ingresos=False) if 
 
 from config_manager import get_ingresos_mes as _get_ingresos_mes
 _hoy_cl = datetime.now(ZoneInfo("America/Santiago"))
-_año_actual = _hoy_cl.year
+# Derivar año del modal de los datos cargados, no del año calendario
+# Evita cross-year bug cuando los datos son de un año distinto al actual
+if not df_tx.empty and "fecha" in df_tx.columns:
+    _años_datos = df_tx["fecha"].dt.year.dropna()
+    _año_actual = int(_años_datos.mode().iat[0]) if not _años_datos.empty else _hoy_cl.year
+else:
+    _año_actual = _hoy_cl.year
 ingresos_config = _get_ingresos_mes(mes_actual, _año_actual)
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -135,13 +135,15 @@ def get_ingresos_mes(mes: int, anio: int) -> float:
             from supabase_repo import (
                 cargar_ingresos_reales_mes as _real,
                 cargar_config_mensual as _mensual,
+                get_active_user as _uid,
             )
+            _uid_cache = _uid() or ""
             # Prioridad 1: suma real de transacciones
-            real = _real(mes, anio)
+            real = _real(mes, anio, _uid_cache)
             if real > 0:
                 return real
             # Prioridad 2: override mensual configurado
-            cfg_mes = _mensual(mes, anio)
+            cfg_mes = _mensual(mes, anio, _uid_cache)
             if cfg_mes:
                 return (
                     float(cfg_mes.get("sueldo_liquido") or 0)
