@@ -23,6 +23,9 @@ import re
 import json
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+_CHILE = ZoneInfo("America/Santiago")
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -205,7 +208,7 @@ def _parse_fecha(valor, año_ctx: int = None) -> pd.Timestamp:
         dia = int(m.group(1))
         mes = _MESES_ES.get(m.group(2).lower(), 0)
         if mes > 0:
-            año = año_ctx or datetime.now().year
+            año = año_ctx or datetime.now(_CHILE).year
             try:
                 return pd.Timestamp(año, mes, dia)
             except ValueError:
@@ -856,6 +859,34 @@ def _parsear_bancoestado_tdc_pdf(path: Path) -> pd.DataFrame:
     return df[_COLS_OUT]
 
 
+# ── Extractor de saldo final ──────────────────────────────────────────────────
+
+def _extraer_saldo_final(path: Path, banco: str) -> float | None:
+    """Extrae el saldo de cuenta más reciente del archivo bancario.
+    Actualmente soportado: Consorcio (columna 'Saldo' en cartola).
+    Retorna None si no se puede extraer."""
+    if banco != "consorcio":
+        return None
+    try:
+        raw = _leer_excel(path)
+        hrow = _find_header_row(raw, ["fecha", "descripci"])
+        if hrow is None:
+            return None
+        headers = [str(v).lower() for v in raw.iloc[hrow]]
+        idx_s = _find_col(headers, ["saldo"])
+        if idx_s is None:
+            return None
+        # Primera fila de datos = transacción más reciente = saldo actual
+        for _, row in raw.iloc[hrow + 1:].iterrows():
+            val = row.iloc[idx_s]
+            saldo = _parse_monto(val)
+            if saldo > 0:
+                return saldo
+    except Exception:
+        pass
+    return None
+
+
 # ── Entry point de parseo ─────────────────────────────────────────────────────
 
 def parsear_archivo_banco(path: str | Path) -> tuple[pd.DataFrame, dict]:
@@ -898,6 +929,9 @@ def parsear_archivo_banco(path: str | Path) -> tuple[pd.DataFrame, dict]:
             df = _parsear_falabella(path)
         elif banco == "consorcio":
             df = _parsear_consorcio(path, cuenta)
+            saldo_fin = _extraer_saldo_final(path, banco)
+            if saldo_fin:
+                info["saldo_final"] = saldo_fin
         else:
             df = _df_vacio()
     except Exception as e:
@@ -1104,7 +1138,9 @@ def _categorizar_con_ia(desc: str, tipo_mov: str, moneda: str, taxonomia: dict) 
             max_tokens=120,
             messages=[{"role": "user", "content": prompt}],
         )
-        return json.loads(msg.content[0].text.strip())
+        raw = msg.content[0].text.strip()
+        raw = re.sub(r"^```(?:json)?\s*\n?|\n?```$", "", raw, flags=re.DOTALL).strip()
+        return json.loads(raw)
     except Exception:
         return {"tipo_tx": "Gasto", "grupo": "Varios y Otros", "concepto": "Sin categorizar"}
 

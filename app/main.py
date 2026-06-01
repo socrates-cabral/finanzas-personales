@@ -2668,6 +2668,7 @@ elif pagina == "🏧 Importar Banco":
     # ── Parsear archivos ─────────────────────────────────────────────────────
     _dfs_raw = []
     _det_rows = []
+    _saldos_detectados = []  # [(archivo, banco, cuenta, saldo, fecha_str)]
     for _uf in _uploaded:
         _suffix = Path(_uf.name).suffix
         with tempfile.NamedTemporaryFile(delete=False, suffix=_suffix) as _tmp:
@@ -2679,17 +2680,62 @@ elif pagina == "🏧 Importar Banco":
         if not _df_raw.empty:
             _df_raw["archivo"] = _uf.name
             _dfs_raw.append(_df_raw)
+        _saldo_det = _info.get("saldo_final")
+        if _saldo_det:
+            _fecha_det = (
+                _df_raw["fecha"].max().strftime("%d/%m/%Y")
+                if not _df_raw.empty and "fecha" in _df_raw.columns
+                else "—"
+            )
+            _saldos_detectados.append({
+                "archivo": _uf.name,
+                "banco":   _info.get("banco", "?").upper(),
+                "cuenta":  _info.get("cuenta", "?"),
+                "saldo":   _saldo_det,
+                "fecha":   _fecha_det,
+            })
         _det_rows.append({
             "Archivo":      _uf.name,
             "Banco":        _info.get("banco", "?").upper(),
             "Cuenta":       _info.get("cuenta", "?"),
             "Moneda":       _info.get("moneda", "?"),
             "Movimientos":  _info.get("n_filas", len(_df_raw)),
+            "Saldo":        fmt_clp(_saldo_det) if _saldo_det else "—",
             "Estado":       "⚠️ Vacío" if _df_raw.empty else ("❌ " + _info["error"][:25] if "error" in _info else "✅ OK"),
         })
 
     with st.expander("Detección de archivos", expanded=True):
         st.dataframe(pd.DataFrame(_det_rows), use_container_width=True, hide_index=True)
+
+    # ── Saldos detectados → sugerir actualizar Patrimonio ────────────────────
+    if _saldos_detectados:
+        st.markdown("---")
+        for _sd in _saldos_detectados:
+            st.markdown(
+                f'<div class="alert-verde">💰 <b>Saldo detectado — {_sd["banco"]} ({_sd["cuenta"].replace("_"," ").title()})</b>: '
+                f'{fmt_clp(_sd["saldo"])} al {_sd["fecha"]}</div>',
+                unsafe_allow_html=True,
+            )
+            _col_sd1, _col_sd2, _col_sd3 = st.columns([2, 2, 1])
+            _dest = _col_sd1.selectbox(
+                "Actualizar en Patrimonio:",
+                ["Cuenta Ahorro (CA)", "Cuenta Corriente (CC)", "Otros activos"],
+                key=f"dest_saldo_{_sd['archivo']}",
+            )
+            _col_sd2.metric("Valor actual en config", fmt_clp(
+                get_cfg("patrimonio_ca") if "Ahorro" in _dest
+                else get_cfg("patrimonio_cc") if "Corriente" in _dest
+                else get_cfg("patrimonio_otros_activos")
+            ))
+            if _col_sd3.button("💾 Aplicar", key=f"btn_saldo_{_sd['archivo']}"):
+                if "Ahorro" in _dest:
+                    set_cfg("patrimonio_ca", int(_sd["saldo"]))
+                elif "Corriente" in _dest:
+                    set_cfg("patrimonio_cc", int(_sd["saldo"]))
+                else:
+                    set_cfg("patrimonio_otros_activos", int(_sd["saldo"]))
+                st.success(f"✅ {_dest} actualizado a {fmt_clp(_sd['saldo'])}. Ve a Patrimonio Neto → '💾 Guardar activos' para registrar el snapshot.")
+        st.markdown("---")
 
     if not _dfs_raw:
         st.error("No se pudo parsear ningún archivo válido.")
