@@ -465,6 +465,32 @@ def _bi_table(df: "pd.DataFrame", money_cols: list = None, pct_cols: list = None
     )
 
 
+def _check_duplicados_lote(filas: list) -> dict:
+    """Detecta duplicados potenciales para un lote de transacciones a importar.
+    Recibe lista de dicts con fecha (str YYYY-MM-DD), importe, grupo.
+    Retorna {índice: [candidatos_existentes]} para filas con match fuzzy.
+    Solo activo en modo Supabase."""
+    from data_source import USANDO_SUPABASE as _SB_DUP
+    if not _SB_DUP:
+        return {}
+    from supabase_repo import detectar_duplicados_potenciales as _dup
+    alertas = {}
+    for i, fila in enumerate(filas):
+        fecha_raw = fila.get("fecha", "") or ""
+        fecha_str = str(fecha_raw)[:10] if fecha_raw else ""
+        importe = float(fila.get("importe") or 0)
+        if importe <= 0 or not fecha_str:
+            continue
+        candidatos = _dup(
+            fecha_str=fecha_str,
+            importe=importe,
+            grupo=str(fila.get("grupo") or ""),
+        )
+        if candidatos:
+            alertas[i] = candidatos
+    return alertas
+
+
 def _limpiar_texto_chat_ai(texto: str) -> str:
     """Quita artefactos markdown del chat AI para mostrar texto legible."""
     _t = str(texto or "").replace("\r\n", "\n").replace("\r", "\n")
@@ -2885,6 +2911,44 @@ elif pagina == "🏧 Importar Banco":
         _cx3.metric("Sin match en Excel ❓", _bno)
         st.dataframe(_dc, use_container_width=True, hide_index=True,
                      column_config={"": st.column_config.TextColumn("", width=30)})
+
+    # ── Alerta anti-duplicados ───────────────────────────────────────────────
+    # TODO: conectar _import_revisadas al flujo real de revisión de transacciones
+    _filas_import = st.session_state.get("_import_revisadas", [])
+    if not _filas_import and "_import_df_cat" in st.session_state:
+        # Fallback: construir filas desde _df_show (disponible en este punto)
+        _filas_import = [
+            {
+                "fecha":    str(r.get("fecha", ""))[:10],
+                "importe":  float(r.get("monto") or 0),
+                "grupo":    str(r.get("grupo") or ""),
+                "concepto": str(r.get("concepto") or ""),
+            }
+            for _, r in _df_show.iterrows()
+        ]
+    if _filas_import:
+        _dups_lote = _check_duplicados_lote(_filas_import)
+        if _dups_lote:
+            with st.expander(
+                f"⚠️ {len(_dups_lote)} posible(s) duplicado(s) — revisar antes de importar",
+                expanded=True
+            ):
+                for _idx_dup, _cands in _dups_lote.items():
+                    _f = _filas_import[_idx_dup]
+                    st.markdown(
+                        f"**Fila {_idx_dup + 1}** — {_f.get('concepto','')} "
+                        f"| {fmt_clp(float(_f.get('importe', 0)))} "
+                        f"| {str(_f.get('fecha', ''))[:10]}"
+                    )
+                    for _c in _cands:
+                        st.caption(
+                            f"→ Existente ID {_c.get('id','?')}: "
+                            f"{_c.get('concepto','')} | "
+                            f"{fmt_clp(float(_c.get('importe',0)))} | "
+                            f"{_c.get('fecha_date','')} | "
+                            f"{_c.get('grupo','')}"
+                        )
+                    st.markdown("---")
 
     # ── Descarga ──────────────────────────────────────────────────────────────
     st.markdown("---")
