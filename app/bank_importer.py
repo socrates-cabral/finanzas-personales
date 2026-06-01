@@ -869,29 +869,53 @@ def _extraer_saldo_final(path: Path, banco: str) -> float | None:
         raw = _leer_excel(path)
 
         if banco == "bci":
-            # BCI: filas 0-6 tienen resumen con "Saldo Disponible" en col 1, valor en col 2
-            # Formato: NaN | "Saldo Disponible" | "$ 908" | NaN | NaN
+            # BCI header: NaN | "Saldo Disponible" | "$ 908" | NaN | NaN
             for _, row in raw.iloc[:8].iterrows():
                 label = str(row.iloc[1] if len(row) > 1 else "").lower()
                 if "saldo disponible" in label or "saldo contable" in label:
                     val = row.iloc[2] if len(row) > 2 else None
                     if val is not None:
-                        # Limpiar "$ 908" → 908
                         val_str = str(val).replace("$", "").replace(".", "").replace(",", ".").strip()
                         try:
                             s = float(val_str)
-                            if s >= 0:   # saldo puede ser 0 (cuenta en cero)
+                            if s >= 0:
                                 return s
                         except (ValueError, TypeError):
                             pass
-            # Fallback BCI: última columna de primera fila de datos (Saldo Contable $)
+            # Fallback BCI: última columna primera fila de datos (Saldo Contable $)
             hrow = _find_header_row(raw, ["fecha", "descripci"])
             if hrow is not None:
                 for _, row in raw.iloc[hrow + 1:].iterrows():
-                    val = row.iloc[-1]
-                    s = _parse_monto(val)
+                    s = _parse_monto(row.iloc[-1])
                     if s is not None:
                         return s
+
+        elif banco == "bancoestado":
+            # BancoEstado: fila con "Saldo Contable $" en col 0, valor en col 3
+            # O bien "Saldo Disponible Cuenta $" en col 4, valor en col 6
+            for _, row in raw.iloc[:15].iterrows():
+                c0 = str(row.iloc[0] if len(row) > 0 else "").lower()
+                # "Saldo Contable $" en col 0 → valor en col 3
+                if "saldo contable $" in c0 and "inicial" not in c0:
+                    s = _parse_monto(row.iloc[3] if len(row) > 3 else None)
+                    if s is not None and s > 0:
+                        return s
+                # "Saldo Disponible Cuenta $" en col 4 → valor en col 6
+                c4 = str(row.iloc[4] if len(row) > 4 else "").lower()
+                if "saldo disponible cuenta" in c4:
+                    s = _parse_monto(row.iloc[6] if len(row) > 6 else None)
+                    if s is not None and s >= 0:
+                        return s
+            # Fallback BancoEstado: columna "Saldo $" primera fila de datos
+            hrow = _find_header_row(raw, ["fecha", "descripci"])
+            if hrow is not None:
+                headers = [str(v).lower() for v in raw.iloc[hrow]]
+                idx_s = _find_col(headers, ["saldo"])
+                if idx_s is not None:
+                    for _, row in raw.iloc[hrow + 1:].iterrows():
+                        s = _parse_monto(row.iloc[idx_s])
+                        if s is not None and s > 0:
+                            return s
 
         elif banco == "consorcio":
             hrow = _find_header_row(raw, ["fecha", "descripci"])
@@ -957,8 +981,8 @@ def parsear_archivo_banco(path: str | Path) -> tuple[pd.DataFrame, dict]:
         else:
             df = _df_vacio()
 
-        # Extraer saldo para bancos soportados (BCI, Consorcio)
-        if banco in ("bci", "consorcio"):
+        # Extraer saldo para bancos soportados (BCI, BancoEstado, Consorcio)
+        if banco in ("bci", "bancoestado", "consorcio"):
             saldo_fin = _extraer_saldo_final(path, banco)
             if saldo_fin is not None:
                 info["saldo_final"] = saldo_fin
