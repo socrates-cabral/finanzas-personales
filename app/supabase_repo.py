@@ -452,7 +452,7 @@ def cargar_config_mensual(mes: int, anio: int) -> dict:
             client.table("config_ingresos_mensual")
             .select("sueldo_liquido,anticipo,amipass,arriendo_cobrado,ingreso_variable,bono_mensual,otros_ingresos,nota")
             .eq("user_id", uid)
-            .eq("anio", anio)
+            .eq("año", anio)
             .eq("mes", mes)
             .execute()
         )
@@ -474,10 +474,10 @@ def guardar_config_mensual(mes: int, anio: int, config: dict) -> bool:
         "ingreso_variable", "bono_mensual", "otros_ingresos", "nota"
     }
     payload = {k: v for k, v in config.items() if k in _campos}
-    payload.update({"user_id": uid, "anio": anio, "mes": mes})
+    payload.update({"user_id": uid, "año": anio, "mes": mes})
     try:
         client.table("config_ingresos_mensual").upsert(
-            payload, on_conflict="user_id,anio,mes"
+            payload, on_conflict="user_id,año,mes"
         ).execute()
         return True
     except Exception:
