@@ -1779,7 +1779,7 @@ elif pagina == "💎 Patrimonio Neto":
             if _k not in _escritas:
                 _nuevas.append(f"{_k}={_v}")
         _env_path.write_text("\n".join(_nuevas), encoding="utf-8")
-        # Guardar snapshot histórica del mes
+        # Guardar snapshot histórica del mes (JSON local)
         from patrimonio_historico import guardar_snapshot as _snap
         _snap(
             cc=cc, ca=ca, crypto_clp=int(_crypto_clp_total),
@@ -1788,6 +1788,26 @@ elif pagina == "💎 Patrimonio Neto":
             linea_credito=linea_credito, otros_pasivos=otros_pasivos,
             afc=int(afc_val),
         )
+        # Sincronizar snapshot a Supabase (modo cloud)
+        from data_source import USANDO_SUPABASE as _SB_PAT
+        if _SB_PAT:
+            from supabase_repo import upsert_patrimonio as _up_pat
+            _fecha_snap = datetime.now(_CHILE).strftime("%Y-%m-%d")
+            _rows_snap = [
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "cc",            "valor": cc},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "ca",            "valor": ca},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "crypto_clp",    "valor": int(_crypto_clp_total)},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "dpto505",       "valor": dpto505_val},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "afp",           "valor": int(afp_val)},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "afc",           "valor": int(afc_val)},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "otros_activos", "valor": otros_activos},
+                {"fecha": _fecha_snap, "categoria": "pasivo", "item": "hipoteca",      "valor": hipoteca_saldo},
+                {"fecha": _fecha_snap, "categoria": "pasivo", "item": "tarjetas",      "valor": tarjetas},
+                {"fecha": _fecha_snap, "categoria": "pasivo", "item": "consumo",       "valor": consumo},
+                {"fecha": _fecha_snap, "categoria": "pasivo", "item": "linea_credito", "valor": linea_credito},
+                {"fecha": _fecha_snap, "categoria": "pasivo", "item": "otros_pasivos", "valor": otros_pasivos},
+            ]
+            _up_pat(pd.DataFrame(_rows_snap))
         st.sidebar.success("✅ Activos guardados y snapshot del mes registrada.")
 
 
@@ -1877,41 +1897,88 @@ elif pagina == "💎 Patrimonio Neto":
 
     # ── Evolución histórica del patrimonio ───────────────────────────────────
     st.markdown("---")
-    st.subheader("📈 Evolución del Patrimonio en el Año")
+    st.subheader("📈 Evolución del Patrimonio")
+
+    # Cargar historial: Supabase (cloud) o JSON local
     from patrimonio_historico import obtener_historico as _get_hist
-    _hist = _get_hist()
-    if len(_hist) < 2:
-        st.info("Guarda activos al menos 2 meses para ver la evolución. Cada vez que hagas clic en '💾 Guardar activos' se registra una snapshot del mes.")
+    from data_source import USANDO_SUPABASE as _SB_PAT2
+    _hist = []
+
+    if _SB_PAT2:
+        try:
+            from supabase_repo import cargar_patrimonio_mensual as _cpm
+            _df_pat_long = _cpm()
+            if not _df_pat_long.empty:
+                _df_pat_long["fecha"] = pd.to_datetime(_df_pat_long["fecha"])
+                _df_pat_long["mes"] = _df_pat_long["fecha"].dt.strftime("%Y-%m")
+                _df_last = (_df_pat_long.sort_values("fecha")
+                            .groupby(["mes", "item"])["valor"].last().reset_index())
+                _pivot = (_df_last.pivot_table(index="mes", columns="item", values="valor", aggfunc="sum")
+                          .fillna(0).reset_index())
+                for _ci in ["cc","ca","crypto_clp","dpto505","afp","afc","otros_activos",
+                            "hipoteca","tarjetas","consumo","linea_credito","otros_pasivos"]:
+                    if _ci not in _pivot.columns:
+                        _pivot[_ci] = 0
+                _pivot["total_activos"]    = (_pivot["cc"] + _pivot["ca"] + _pivot["crypto_clp"]
+                                              + _pivot["dpto505"] + _pivot["afp"] + _pivot["afc"]
+                                              + _pivot["otros_activos"])
+                _pivot["total_pasivos"]    = (_pivot["hipoteca"] + _pivot["tarjetas"]
+                                              + _pivot["consumo"] + _pivot["linea_credito"]
+                                              + _pivot["otros_pasivos"])
+                _pivot["patrimonio_neto"]  = _pivot["total_activos"] - _pivot["total_pasivos"]
+                _pivot["activos_liquidos"] = _pivot["cc"] + _pivot["ca"] + _pivot["crypto_clp"]
+                _hist = _pivot.to_dict("records")
+        except Exception:
+            pass
+
+    if not _hist:
+        _hist_raw = _get_hist()
+        for _h in _hist_raw:
+            _h["activos_liquidos"] = _h.get("cc", 0) + _h.get("ca", 0) + _h.get("crypto_clp", 0)
+        _hist = _hist_raw
+
+    if not _hist:
+        st.info("Guarda activos haciendo clic en '💾 Guardar activos' para registrar la primera snapshot del mes.")
     else:
-        _df_hist = pd.DataFrame(_hist)
+        _df_hist = pd.DataFrame(_hist).sort_values("mes").reset_index(drop=True)
         import plotly.graph_objects as _go
         _fig_hist = _go.Figure()
+        # Activos líquidos (CC + CA + Crypto) — línea punteada celeste
+        _fig_hist.add_trace(_go.Scatter(
+            x=_df_hist["mes"], y=_df_hist["activos_liquidos"],
+            name="Activos Líquidos", line=dict(color="#38BDF8", width=2, dash="dot"),
+            hovertemplate="<b>%{x}</b><br>Líquidos: $%{y:,.0f}<extra></extra>"
+        ))
+        # Patrimonio neto — línea principal teal
         _fig_hist.add_trace(_go.Scatter(
             x=_df_hist["mes"], y=_df_hist["patrimonio_neto"],
             name="Patrimonio Neto", line=dict(color="#14b8a6", width=3),
-            fill="tozeroy", fillcolor="rgba(20,184,166,0.08)",
+            fill="tozeroy", fillcolor="rgba(20,184,166,0.07)",
             hovertemplate="<b>%{x}</b><br>Patrimonio: $%{y:,.0f}<extra></extra>"
         ))
+        # Total activos y pasivos como barras semitransparentes
         _fig_hist.add_trace(_go.Bar(
             x=_df_hist["mes"], y=_df_hist["total_activos"],
-            name="Total Activos", marker_color="rgba(74,222,128,0.4)",
+            name="Total Activos", marker_color="rgba(74,222,128,0.35)",
             hovertemplate="<b>%{x}</b><br>Activos: $%{y:,.0f}<extra></extra>"
         ))
         _fig_hist.add_trace(_go.Bar(
             x=_df_hist["mes"], y=[-v for v in _df_hist["total_pasivos"]],
-            name="Total Pasivos", marker_color="rgba(248,113,113,0.4)",
-            hovertemplate="<b>%{x}</b><br>Pasivos: $%{y:,.0f}<extra></extra>"
+            name="Deuda Total", marker_color="rgba(248,113,113,0.35)",
+            hovertemplate="<b>%{x}</b><br>Deuda: $%{y:,.0f}<extra></extra>"
         ))
-        _layout = {**_LAYOUT_BASE, "barmode": "overlay", "title": "Activos vs Pasivos vs Patrimonio Neto"}
-        _fig_hist.update_layout(**_layout)
+        _layout_hist = {**_LAYOUT_BASE, "barmode": "overlay",
+                        "title": "Activos · Deuda · Patrimonio Neto · Activos Líquidos"}
+        _fig_hist.update_layout(**_layout_hist)
         st.plotly_chart(_fig_hist, use_container_width=True)
 
-        # Tabla resumen histórico
-        _df_tabla = _df_hist[["mes","total_activos","total_pasivos","patrimonio_neto"]].copy()
-        _df_tabla.columns = ["Mes", "Total Activos", "Total Pasivos", "Patrimonio Neto"]
-        for _col in ["Total Activos", "Total Pasivos", "Patrimonio Neto"]:
-            _df_tabla[_col] = _df_tabla[_col].apply(fmt_clp)
-        _bi_table(_df_tabla, right_cols=["Total Activos", "Total Pasivos", "Patrimonio Neto"])
+        # Tabla mes a mes con activos líquidos
+        _df_tabla = _df_hist[["mes","activos_liquidos","total_activos","total_pasivos","patrimonio_neto"]].copy()
+        _df_tabla.columns = ["Mes","Activos Líquidos","Total Activos","Total Pasivos","Patrimonio Neto"]
+        for _col in ["Activos Líquidos","Total Activos","Total Pasivos","Patrimonio Neto"]:
+            _df_tabla[_col] = pd.to_numeric(_df_tabla[_col], errors="coerce").apply(
+                lambda v: fmt_clp(v) if pd.notna(v) else "")
+        _bi_table(_df_tabla, right_cols=["Activos Líquidos","Total Activos","Total Pasivos","Patrimonio Neto"])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
