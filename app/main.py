@@ -600,8 +600,9 @@ def _calc_dashboard_patrimonio():
         _crypto_clp_total = int(get_cfg("patrimonio_usdt") * get_cfg("precio_usdt_clp"))
 
     activos = {
-        "Cta. Corriente/Vista": get_cfg("patrimonio_cc"),
-        "Cta. Ahorro": get_cfg("patrimonio_ca"),
+        "Cta. Corriente": get_cfg("patrimonio_cc"),
+        "Cta. Vista": get_cfg("patrimonio_cv"),
+        "Cta. Ahorro/Más": get_cfg("patrimonio_ca"),
         f"Crypto ({_crypto_fuente})": int(_crypto_clp_total),
         "Dpto 505 Los Claros": get_cfg("patrimonio_dpto505"),
         "AFP ProVida": get_cfg("afp_saldo"),
@@ -617,7 +618,7 @@ def _calc_dashboard_patrimonio():
     }
     _ingresos_anuales_pat = float(get_cfg("sueldo_liquido") or 0) * 12
     patr = calc_patrimonio_neto(activos, pasivos, ingresos_anuales=_ingresos_anuales_pat)
-    activos_liquidos = get_cfg("patrimonio_cc") + get_cfg("patrimonio_ca") + int(_crypto_clp_total)
+    activos_liquidos = get_cfg("patrimonio_cc") + get_cfg("patrimonio_cv") + get_cfg("patrimonio_ca") + int(_crypto_clp_total)
     return patr, activos_liquidos
 
 
@@ -1724,8 +1725,9 @@ elif pagina == "💎 Patrimonio Neto":
     _crypto_clp_total, _crypto_fuente = st.session_state[_cache_key]
 
     st.sidebar.markdown("### Activos")
-    cc          = st.sidebar.number_input("Cuenta Corriente/Vista (CLP)", value=get_cfg("patrimonio_cc"),            step=100_000,   format="%d")
-    ca          = st.sidebar.number_input("Cuenta Ahorro (CLP)",          value=get_cfg("patrimonio_ca"),            step=100_000,   format="%d")
+    cc          = st.sidebar.number_input("Cuenta Corriente (CLP)",       value=get_cfg("patrimonio_cc"),            step=100_000,   format="%d")
+    cv          = st.sidebar.number_input("Cuenta Vista (CLP)",           value=get_cfg("patrimonio_cv"),            step=100_000,   format="%d")
+    ca          = st.sidebar.number_input("Cuenta Ahorro / Cuenta Más (CLP)", value=get_cfg("patrimonio_ca"),        step=100_000,   format="%d")
     dpto505_val = st.sidebar.number_input("Dpto 505 Los Claros (valor mercado)", value=get_cfg("patrimonio_dpto505"), step=1_000_000, format="%d")
     afp_val     = get_cfg("afp_saldo")
     afc_val     = get_cfg("afc_saldo")
@@ -1750,6 +1752,7 @@ elif pagina == "💎 Patrimonio Neto":
 
     if st.sidebar.button("💾 Guardar activos"):
         set_cfg("patrimonio_cc",            cc)
+        set_cfg("patrimonio_cv",            cv)
         set_cfg("patrimonio_ca",            ca)
         set_cfg("patrimonio_usdt",          usdt_qty)
         set_cfg("patrimonio_dpto505",       dpto505_val)
@@ -1795,6 +1798,7 @@ elif pagina == "💎 Patrimonio Neto":
             _fecha_snap = datetime.now(_CHILE).strftime("%Y-%m-%d")
             _rows_snap = [
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "cc",            "valor": cc},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "cv",            "valor": cv},
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "ca",            "valor": ca},
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "crypto_clp",    "valor": int(_crypto_clp_total)},
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "dpto505",       "valor": dpto505_val},
@@ -1812,8 +1816,9 @@ elif pagina == "💎 Patrimonio Neto":
 
 
     activos = {
-        "Cta. Corriente/Vista": cc,
-        "Cta. Ahorro":          ca,
+        "Cta. Corriente":  cc,
+        "Cta. Vista":      cv,
+        "Cta. Ahorro/Más": ca,
         f"Crypto ({_crypto_fuente})": int(_crypto_clp_total),
         "Dpto 505 Los Claros":  dpto505_val,
         "AFP ProVida":          afp_val,
@@ -1863,7 +1868,7 @@ elif pagina == "💎 Patrimonio Neto":
             st.markdown(f'<div class="alert-verde">🟢 Deuda/Ingresos anuales saludable: {ratio_di:.0f}%.</div>', unsafe_allow_html=True)
 
     # Activos líquidos
-    activos_liquidos = cc + ca + int(_crypto_clp_total)
+    activos_liquidos = cc + cv + ca + int(_crypto_clp_total)
     st.metric("💧 Activos Líquidos", fmt_clp(activos_liquidos),
               delta=f"{activos_liquidos/patr['total_activos']*100:.1f}% del total" if patr["total_activos"] > 0 else "0%")
 
@@ -1926,7 +1931,7 @@ elif pagina == "💎 Patrimonio Neto":
                                               + _pivot["consumo"] + _pivot["linea_credito"]
                                               + _pivot["otros_pasivos"])
                 _pivot["patrimonio_neto"]  = _pivot["total_activos"] - _pivot["total_pasivos"]
-                _pivot["activos_liquidos"] = _pivot["cc"] + _pivot["ca"] + _pivot["crypto_clp"]
+                _pivot["activos_liquidos"] = _pivot["cc"] + _pivot.get("cv", 0) + _pivot["ca"] + _pivot["crypto_clp"]
                 _hist = _pivot.to_dict("records")
         except Exception:
             pass
@@ -1934,7 +1939,7 @@ elif pagina == "💎 Patrimonio Neto":
     if not _hist:
         _hist_raw = _get_hist()
         for _h in _hist_raw:
-            _h["activos_liquidos"] = _h.get("cc", 0) + _h.get("ca", 0) + _h.get("crypto_clp", 0)
+            _h["activos_liquidos"] = _h.get("cc", 0) + _h.get("cv", 0) + _h.get("ca", 0) + _h.get("crypto_clp", 0)
         _hist = _hist_raw
 
     if not _hist:
@@ -1968,7 +1973,9 @@ elif pagina == "💎 Patrimonio Neto":
             hovertemplate="<b>%{x}</b><br>Deuda: $%{y:,.0f}<extra></extra>"
         ))
         _layout_hist = {**_LAYOUT_BASE, "barmode": "overlay",
-                        "title": "Activos · Deuda · Patrimonio Neto · Activos Líquidos"}
+                        "title": "Activos · Deuda · Patrimonio Neto · Activos Líquidos",
+                        "xaxis": {"type": "category", "tickfont": {"color": "#64748B", "size": 11},
+                                  "gridcolor": "#1a2535", "linecolor": "#334155"}}
         _fig_hist.update_layout(**_layout_hist)
         st.plotly_chart(_fig_hist, use_container_width=True)
 
@@ -2719,17 +2726,20 @@ elif pagina == "🏧 Importar Banco":
             _col_sd1, _col_sd2, _col_sd3 = st.columns([2, 2, 1])
             _dest = _col_sd1.selectbox(
                 "Actualizar en Patrimonio:",
-                ["Cuenta Ahorro (CA)", "Cuenta Corriente (CC)", "Otros activos"],
+                ["Cuenta Ahorro / Más (CA)", "Cuenta Vista (CV)", "Cuenta Corriente (CC)", "Otros activos"],
                 key=f"dest_saldo_{_sd['archivo']}",
             )
             _col_sd2.metric("Valor actual en config", fmt_clp(
                 get_cfg("patrimonio_ca") if "Ahorro" in _dest
+                else get_cfg("patrimonio_cv") if "Vista" in _dest
                 else get_cfg("patrimonio_cc") if "Corriente" in _dest
                 else get_cfg("patrimonio_otros_activos")
             ))
             if _col_sd3.button("💾 Aplicar", key=f"btn_saldo_{_sd['archivo']}"):
                 if "Ahorro" in _dest:
                     set_cfg("patrimonio_ca", int(_sd["saldo"]))
+                elif "Vista" in _dest:
+                    set_cfg("patrimonio_cv", int(_sd["saldo"]))
                 elif "Corriente" in _dest:
                     set_cfg("patrimonio_cc", int(_sd["saldo"]))
                 else:

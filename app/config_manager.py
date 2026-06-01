@@ -32,6 +32,7 @@ DEFAULTS = {
     "hipoteca_saldo": 0,
     "precio_usdt_clp": 960,
     "patrimonio_cc":           int(os.getenv("PATRIMONIO_CC", 0)),
+    "patrimonio_cv":           int(os.getenv("PATRIMONIO_CV", 0)),
     "patrimonio_ca":           int(os.getenv("PATRIMONIO_CA", 0)),
     "patrimonio_usdt":         float(os.getenv("PATRIMONIO_USDT", 0.0)),
     "patrimonio_dpto505":      int(os.getenv("PATRIMONIO_DPTO505", 120_000_000)),
