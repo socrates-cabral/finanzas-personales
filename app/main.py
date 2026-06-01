@@ -1213,10 +1213,10 @@ if pagina == "📊 Dashboard":
             _div_tx = df_tx[df_tx["concepto"].fillna("").astype(str).str.contains("Dividendo", case=False)]
             _arr_tx = df_tx[df_tx["concepto"].fillna("").astype(str).str.contains("Arriendo cobrado", case=False)]
             for _m in sorted(df_tx["mes"].unique()):
-                _div_m = _div_tx[_div_tx["mes"] == _m]["importe"].sum()
-                if _div_m > 0:
-                    # Arriendo real del mes desde transacciones; fallback al config global
-                    _arr_m = float(_arr_tx[_arr_tx["mes"] == _m]["importe"].sum()) or _arr_cob_global
+                _div_m = float(_div_tx[_div_tx["mes"] == _m]["importe"].sum())
+                _arr_m = float(_arr_tx[_arr_tx["mes"] == _m]["importe"].sum()) or _arr_cob_global
+                # Mostrar si hay dividendo O si hay arriendo registrado ese mes
+                if _div_m > 0 or _arr_m > 0:
                     _uf_m = indicadores.get("uf", 0) if _m == mes_actual else 0
                     _hist_div.append({
                         "mes": _m,
