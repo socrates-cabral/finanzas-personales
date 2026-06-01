@@ -6,6 +6,9 @@ import os
 import re
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+_CHILE = ZoneInfo("America/Santiago")
 
 import streamlit as st
 import pandas as pd
@@ -537,10 +540,10 @@ def _dividir_consultas_chat(texto: str) -> list[str]:
 def _calc_dashboard_patrimonio():
     """Replica la base consolidada de Patrimonio Neto para el KPI del Dashboard."""
     _deudas_json = obtener_deudas()
-    _auto_hipoteca = sum(d["saldo_actual"] for d in _deudas_json if d.get("tipo", "").lower() in ["vivienda", "hipotecario"])
-    _auto_consumo = sum(d["saldo_actual"] for d in _deudas_json if d.get("tipo", "").lower() in ["consumo", "comercial", "automotriz"])
-    _auto_tarjetas = sum(d["saldo_actual"] for d in _deudas_json if d.get("tipo", "").lower() in ["tarjeta"])
-    _auto_linea = sum(d["saldo_actual"] for d in _deudas_json if d.get("tipo", "").lower() in ["línea de crédito", "linea de credito", "línea", "linea"])
+    _auto_hipoteca = sum(d.get("saldo_actual") or 0 for d in _deudas_json if any(t in (d.get("tipo") or "").lower() for t in ["vivienda", "hipotecario"]))
+    _auto_consumo  = sum(d.get("saldo_actual") or 0 for d in _deudas_json if any(t in (d.get("tipo") or "").lower() for t in ["consumo", "comercial", "automotriz"]))
+    _auto_tarjetas = sum(d.get("saldo_actual") or 0 for d in _deudas_json if "tarjeta" in (d.get("tipo") or "").lower())
+    _auto_linea = sum(d.get("saldo_actual") or 0 for d in _deudas_json if "linea" in (d.get("tipo") or "").lower().replace("í", "i"))
 
     import time as _time
     _cache_key = "patrimonio_crypto_cache"
@@ -839,10 +842,10 @@ with st.sidebar:
 
 # ── Carga de datos (cacheada) ─────────────────────────────────────────────────
 @st.cache_data(ttl=300)
-def _cargar_datos(excel_path: str):
-    df = cargar_transacciones(excel_path)
+def _cargar_datos(excel_path: str, uid: str = ""):
+    df = cargar_transacciones(excel_path, uid=uid)
     saldos = cargar_saldos_mensuales(excel_path)
-    cats = cargar_categorias(excel_path)
+    cats = cargar_categorias(excel_path, uid=uid)
     return df, saldos, cats
 
 
@@ -853,7 +856,7 @@ saldos_mes = {}
 df_cats = pd.DataFrame()
 
 try:
-    df_tx, saldos_mes, df_cats = _cargar_datos(excel_path)
+    df_tx, saldos_mes, df_cats = _cargar_datos(excel_path, uid=st.session_state.get("_auth_user_id", ""))
     # Enriquecer con tipo desde categorías
     if not df_cats.empty and not df_tx.empty:
         tipo_map = df_cats.set_index("grupo")["tipo"].to_dict()
@@ -872,9 +875,10 @@ meses_con_datos = sorted(df_tx["mes"].unique().tolist()) if not df_tx.empty else
 mes_actual = meses_con_datos[-1] if meses_con_datos else 1
 df_tx_oper = filtrar_transacciones_operativas(df_tx, incluir_ingresos=False) if not df_tx.empty else pd.DataFrame()
 
-# Ingresos desde config — calc_total_ingresos() incluye sueldo + amipass + arriendo_cobrado + variables
-from config_manager import calc_total_ingresos as _calc_ingresos
-ingresos_config = _calc_ingresos()
+from config_manager import get_ingresos_mes as _get_ingresos_mes
+_hoy_cl = datetime.now(ZoneInfo("America/Santiago"))
+_año_actual = _hoy_cl.year
+ingresos_config = _get_ingresos_mes(mes_actual, _año_actual)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PÁGINA: DASHBOARD
@@ -1130,9 +1134,10 @@ if pagina == "📊 Dashboard":
             _gc_dash = cargar_gastos_compartidos(excel_path) if excel_path else None
             if ("fecha" in df_mes_actual.columns and not df_mes_actual.empty and
                     pd.api.types.is_datetime64_any_dtype(df_mes_actual["fecha"])):
-                anio_analisis = int(df_mes_actual["fecha"].dt.year.mode().iat[0])
+                _years = df_mes_actual["fecha"].dt.year.dropna()
+                anio_analisis = int(_years.mode().iat[0]) if not _years.empty else datetime.now(_CHILE).year
             else:
-                anio_analisis = datetime.now().year
+                anio_analisis = datetime.now(_CHILE).year
             _gc_total = _gc_dash.get("total", 0) if isinstance(_gc_dash, dict) else 0
             _gc_persona = _gc_dash.get("por_persona", 0) if isinstance(_gc_dash, dict) else 0
             _dash_ai_signature = (
@@ -1172,9 +1177,7 @@ if pagina == "📊 Dashboard":
         # Extraer dividendo hipotecario por mes desde transacciones
         _hist_div = []
         if not df_tx.empty:
-            _div_tx = df_tx[df_tx["concepto"].str.contains("Dividendo", case=False, na=False) |
-                            df_tx["grupo"].str.contains("Hogar|Viviend", case=False, na=False)]
-            _div_tx = _div_tx[_div_tx["concepto"].str.contains("Dividendo", case=False, na=False)]
+            _div_tx = df_tx[df_tx["concepto"].fillna("").astype(str).str.contains("Dividendo", case=False)]
             for _m in sorted(df_tx["mes"].unique()):
                 _div_m = _div_tx[_div_tx["mes"] == _m]["importe"].sum()
                 if _div_m > 0:
@@ -1564,8 +1567,8 @@ elif pagina == "📈 Anual":
         st.warning("Sin datos disponibles.")
         st.stop()
 
-    # Ingresos por mes (constante de config)
-    ingresos_lista = [ingresos_config] * len(meses_con_datos)
+    # Ingresos por mes (real desde Control_gastos por mes)
+    ingresos_lista = [_get_ingresos_mes(m, _año_actual) for m in meses_con_datos]
     gastos_lista = [calc_resumen_mes(df_tx, m)["total"] for m in meses_con_datos]
     meses_nombres = [NOMBRES_MESES[m] for m in meses_con_datos]
 
@@ -1605,7 +1608,7 @@ elif pagina == "📈 Anual":
     df_top5 = pd.DataFrame({
         "Grupo": top5.index,
         "Total": top5.values,
-        "% del Total": top5.values / total_anual * 100 if total_anual > 0 else 0,
+        "% del Total": (top5.values / total_anual * 100) if total_anual > 0 else [0.0] * len(top5),
     })
     df_top5["Total"] = df_top5["Total"].apply(fmt_clp)
     df_top5["% del Total"] = df_top5["% del Total"].apply(lambda v: f"{v:.1f}%")
@@ -1720,7 +1723,10 @@ elif pagina == "💎 Patrimonio Neto":
         set_cfg("patrimonio_dpto505",       dpto505_val)
         set_cfg("patrimonio_otros_activos", otros_activos)
         _env_path = Path(__file__).parent.parent.parent / ".env"
-        _lineas = _env_path.read_text(encoding="utf-8").splitlines()
+        try:
+            _lineas = _env_path.read_text(encoding="utf-8").splitlines()
+        except (FileNotFoundError, PermissionError):
+            _lineas = []
         _map = {
             "PATRIMONIO_CC":            str(cc),
             "PATRIMONIO_CA":            str(ca),
@@ -2210,7 +2216,7 @@ elif pagina == "₿ Inversiones":
         st.stop()
 
     # ── Obtener USD/CLP ───────────────────────────────────────────────────────
-    usd_clp = precios.get("tether", {}).get("price_clp", get_cfg("precio_usdt_clp")) or get_cfg("precio_usdt_clp")
+    usd_clp = precios.get("tether", {}).get("price_clp") or get_cfg("precio_usdt_clp") or 960
 
     # ── Construir portafolio desde Kraken o fallback Excel ────────────────────
     SYMBOL_TO_CG = {
@@ -2887,7 +2893,7 @@ elif pagina == "🏧 Importar Banco":
     st.download_button(
         "⬇ Descargar CSV (listo para pegar en Excel)",
         _csv_out,
-        file_name=f"movimientos_bancos_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+        file_name=f"movimientos_bancos_{datetime.now(_CHILE).strftime('%Y%m%d_%H%M')}.csv",
         mime="text/csv",
     )
 
@@ -3438,7 +3444,7 @@ elif pagina == "🎯 Simulador":
         st.subheader("💳 Amortización de Deuda")
         col1, col2, col3 = st.columns(3)
         with col1:
-            saldo_deuda = st.number_input("Saldo deuda (CLP)", value=1_000_000, step=10_000, format="%d")
+            saldo_deuda = st.number_input("Saldo deuda (CLP)", min_value=1, value=1_000_000, step=10_000, format="%d")
         with col2:
             tasa_deuda = st.number_input("Tasa mensual (%)", value=1.5, step=0.1, format="%.2f")
         with col3:
@@ -3472,7 +3478,7 @@ elif pagina == "🎯 Simulador":
         st.info("Configura ANTHROPIC_API_KEY para habilitar el asistente.")
     else:
         _ctx_ai = _contexto_ai_app(df_tx, saldos_mes, mes_actual, ingresos_config)
-        _chat_key = "ai_chat_historial"
+        _chat_key = f"ai_chat_historial_{st.session_state.get('_auth_user_id', 'anon')}"
         if _chat_key not in st.session_state:
             st.session_state[_chat_key] = [
                 {
