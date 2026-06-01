@@ -3580,6 +3580,58 @@ elif pagina == "⚙️ Ajustes":
     total_calc = nuevo_sueldo + nuevo_anticipo + nuevo_amipass + nuevo_arriendo + nuevo_ingreso_variable + nuevo_bono + nuevo_otros_ingresos
     st.metric("Total ingresos calculado", fmt_clp(total_calc))
 
+    # ── Override de ingresos por mes ─────────────────────────────────────────
+    with st.expander("📅 Override de Ingresos por Mes (licencia, bonos, variaciones)", expanded=False):
+        st.caption("Configura ingresos reales para meses donde los valores no coinciden con el default (ej: licencia médica, mes con bono extraordinario).")
+        _col_año_ov, _col_mes_ov = st.columns(2)
+        with _col_año_ov:
+            _año_ov = st.number_input("Año", value=_año_actual, min_value=2024, max_value=_año_actual + 1, step=1, key="ov_año")
+        with _col_mes_ov:
+            _mes_ov = st.selectbox("Mes", options=list(range(1, 13)),
+                                   format_func=lambda m: NOMBRES_MESES.get(m, str(m)), key="ov_mes")
+
+        from data_source import USANDO_SUPABASE as _SB_OV
+        _cfg_ov_existente = {}
+        if _SB_OV:
+            from supabase_repo import cargar_config_mensual as _cm_ov
+            _cfg_ov_existente = _cm_ov(int(_mes_ov), int(_año_ov))
+
+        _col_ov1, _col_ov2 = st.columns(2)
+        with _col_ov1:
+            _ov_sueldo   = st.number_input("Sueldo líquido",    value=int(_cfg_ov_existente.get("sueldo_liquido") or 0),   step=10_000, format="%d", key="ov_sueldo")
+            _ov_anticipo = st.number_input("Anticipo",          value=int(_cfg_ov_existente.get("anticipo") or 0),         step=10_000, format="%d", key="ov_anticipo")
+            _ov_amipass  = st.number_input("Amipass",           value=int(_cfg_ov_existente.get("amipass") or 0),          step=1_000,  format="%d", key="ov_amipass")
+            _ov_arriendo = st.number_input("Arriendo cobrado",  value=int(_cfg_ov_existente.get("arriendo_cobrado") or 0), step=10_000, format="%d", key="ov_arriendo")
+        with _col_ov2:
+            _ov_variable = st.number_input("Ingreso variable",  value=int(_cfg_ov_existente.get("ingreso_variable") or 0), step=10_000, format="%d", key="ov_variable")
+            _ov_bono     = st.number_input("Bono mensual",      value=int(_cfg_ov_existente.get("bono_mensual") or 0),     step=10_000, format="%d", key="ov_bono")
+            _ov_otros    = st.number_input("Otros ingresos",    value=int(_cfg_ov_existente.get("otros_ingresos") or 0),   step=10_000, format="%d", key="ov_otros")
+            _ov_nota     = st.text_input("Nota (ej: licencia médica)", value=str(_cfg_ov_existente.get("nota") or ""), key="ov_nota")
+
+        _ov_total = _ov_sueldo + _ov_anticipo + _ov_amipass + _ov_arriendo + _ov_variable + _ov_bono + _ov_otros
+        st.caption(f"Total override: **{fmt_clp(_ov_total)}**")
+
+        if st.button("💾 Guardar override mensual", key="btn_ov_guardar"):
+            if _SB_OV:
+                from supabase_repo import guardar_config_mensual as _gcm_ov
+                _ok_ov = _gcm_ov(int(_mes_ov), int(_año_ov), {
+                    "sueldo_liquido":   _ov_sueldo,
+                    "anticipo":         _ov_anticipo,
+                    "amipass":          _ov_amipass,
+                    "arriendo_cobrado": _ov_arriendo,
+                    "ingreso_variable": _ov_variable,
+                    "bono_mensual":     _ov_bono,
+                    "otros_ingresos":   _ov_otros,
+                    "nota":             _ov_nota,
+                })
+                if _ok_ov:
+                    st.success(f"✅ Override guardado para {NOMBRES_MESES.get(int(_mes_ov))} {int(_año_ov)}")
+                    st.cache_data.clear()
+                else:
+                    st.error("Error al guardar. Verifica conexión Supabase.")
+            else:
+                st.warning("Override mensual solo disponible en modo Supabase.")
+
     st.markdown("---")
     st.subheader("🏛️ Datos AFP, AFC y Previsión")
     col3, col4 = st.columns(2)
