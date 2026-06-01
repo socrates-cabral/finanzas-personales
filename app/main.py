@@ -1206,20 +1206,24 @@ if pagina == "📊 Dashboard":
     # ── Monitor Dividendo UF ──────────────────────────────────────────────────
     st.markdown("---")
     with st.expander("🏠 Monitor Dividendo UF — Costo Neto Vivienda mes a mes", expanded=False):
-        _arr_cob = get_cfg("arriendo_cobrado")
-        # Extraer dividendo hipotecario por mes desde transacciones
+        _arr_cob_global = get_cfg("arriendo_cobrado")
+        # Extraer dividendo hipotecario y arriendo real por mes desde transacciones
         _hist_div = []
         if not df_tx.empty:
             _div_tx = df_tx[df_tx["concepto"].fillna("").astype(str).str.contains("Dividendo", case=False)]
+            _arr_tx = df_tx[df_tx["concepto"].fillna("").astype(str).str.contains("Arriendo cobrado", case=False)]
             for _m in sorted(df_tx["mes"].unique()):
                 _div_m = _div_tx[_div_tx["mes"] == _m]["importe"].sum()
                 if _div_m > 0:
+                    # Arriendo real del mes desde transacciones; fallback al config global
+                    _arr_m = float(_arr_tx[_arr_tx["mes"] == _m]["importe"].sum()) or _arr_cob_global
                     _uf_m = indicadores.get("uf", 0) if _m == mes_actual else 0
                     _hist_div.append({
                         "mes": _m,
                         "mes_nombre": NOMBRES_MESES.get(_m, str(_m)),
                         "dividendo": _div_m,
-                        "neto": _div_m - _arr_cob,
+                        "arriendo":  _arr_m,
+                        "neto": _div_m - _arr_m,
                         "uf": _uf_m,
                     })
 
@@ -1228,7 +1232,7 @@ if pagina == "📊 Dashboard":
             _meses_lbl = [h["mes_nombre"] for h in _hist_div]
             _divs      = [h["dividendo"] for h in _hist_div]
             _netos     = [h["neto"] for h in _hist_div]
-            _arrs      = [_arr_cob] * len(_hist_div)
+            _arrs      = [h["arriendo"] for h in _hist_div]
 
             _fig_div = _go.Figure()
             _fig_div.add_trace(_go.Scatter(x=_meses_lbl, y=_divs,  name="Dividendo bruto",  mode="lines+markers", line=dict(color="#f59e0b", width=2)))
@@ -1267,7 +1271,7 @@ if pagina == "📊 Dashboard":
                 _rows_html += f"""<tr style="{_row_style}">
                     <td style="font-weight:{'600' if _is_last else '400'};color:{'#e2e8f0' if _is_last else '#94a3b8'}">{h["mes_nombre"]}</td>
                     <td style="text-align:right;color:#f59e0b">{fmt_clp(h["dividendo"])}</td>
-                    <td style="text-align:right;color:#10b981">{fmt_clp(_arr_cob)}</td>
+                    <td style="text-align:right;color:#10b981">{fmt_clp(h["arriendo"])}</td>
                     <td style="text-align:right;color:#6366f1;font-weight:600">{fmt_clp(h["neto"])}</td>
                     <td style="text-align:right">{_var_html(_var_div_str)}</td>
                     <td style="text-align:right">{_var_html(_var_neto_str)}</td>
@@ -1305,7 +1309,7 @@ if pagina == "📊 Dashboard":
                 with _col_ai2:
                     _analisis_div = render_insight_con_spinner(
                         "Dividendo UF", analizar_dividendo_historico,
-                        _hist_div, _arr_cob,
+                        _hist_div, _arr_cob_global,
                         cache_key="div_historico",
                     )
                     if _analisis_div:
