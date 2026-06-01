@@ -863,25 +863,50 @@ def _parsear_bancoestado_tdc_pdf(path: Path) -> pd.DataFrame:
 
 def _extraer_saldo_final(path: Path, banco: str) -> float | None:
     """Extrae el saldo de cuenta más reciente del archivo bancario.
-    Actualmente soportado: Consorcio (columna 'Saldo' en cartola).
+    Soportado: Consorcio (columna Saldo en datos), BCI (header Saldo Disponible).
     Retorna None si no se puede extraer."""
-    if banco != "consorcio":
-        return None
     try:
         raw = _leer_excel(path)
-        hrow = _find_header_row(raw, ["fecha", "descripci"])
-        if hrow is None:
-            return None
-        headers = [str(v).lower() for v in raw.iloc[hrow]]
-        idx_s = _find_col(headers, ["saldo"])
-        if idx_s is None:
-            return None
-        # Primera fila de datos = transacción más reciente = saldo actual
-        for _, row in raw.iloc[hrow + 1:].iterrows():
-            val = row.iloc[idx_s]
-            saldo = _parse_monto(val)
-            if saldo > 0:
-                return saldo
+
+        if banco == "bci":
+            # BCI: filas 0-6 tienen resumen con "Saldo Disponible" en col 1, valor en col 2
+            # Formato: NaN | "Saldo Disponible" | "$ 908" | NaN | NaN
+            for _, row in raw.iloc[:8].iterrows():
+                label = str(row.iloc[1] if len(row) > 1 else "").lower()
+                if "saldo disponible" in label or "saldo contable" in label:
+                    val = row.iloc[2] if len(row) > 2 else None
+                    if val is not None:
+                        # Limpiar "$ 908" → 908
+                        val_str = str(val).replace("$", "").replace(".", "").replace(",", ".").strip()
+                        try:
+                            s = float(val_str)
+                            if s >= 0:   # saldo puede ser 0 (cuenta en cero)
+                                return s
+                        except (ValueError, TypeError):
+                            pass
+            # Fallback BCI: última columna de primera fila de datos (Saldo Contable $)
+            hrow = _find_header_row(raw, ["fecha", "descripci"])
+            if hrow is not None:
+                for _, row in raw.iloc[hrow + 1:].iterrows():
+                    val = row.iloc[-1]
+                    s = _parse_monto(val)
+                    if s is not None:
+                        return s
+
+        elif banco == "consorcio":
+            hrow = _find_header_row(raw, ["fecha", "descripci"])
+            if hrow is None:
+                return None
+            headers = [str(v).lower() for v in raw.iloc[hrow]]
+            idx_s = _find_col(headers, ["saldo"])
+            if idx_s is None:
+                return None
+            for _, row in raw.iloc[hrow + 1:].iterrows():
+                val = row.iloc[idx_s]
+                saldo = _parse_monto(val)
+                if saldo and saldo > 0:
+                    return saldo
+
     except Exception:
         pass
     return None
@@ -929,11 +954,14 @@ def parsear_archivo_banco(path: str | Path) -> tuple[pd.DataFrame, dict]:
             df = _parsear_falabella(path)
         elif banco == "consorcio":
             df = _parsear_consorcio(path, cuenta)
-            saldo_fin = _extraer_saldo_final(path, banco)
-            if saldo_fin:
-                info["saldo_final"] = saldo_fin
         else:
             df = _df_vacio()
+
+        # Extraer saldo para bancos soportados (BCI, Consorcio)
+        if banco in ("bci", "consorcio"):
+            saldo_fin = _extraer_saldo_final(path, banco)
+            if saldo_fin is not None:
+                info["saldo_final"] = saldo_fin
     except Exception as e:
         df = _df_vacio()
         info["error"] = str(e)
