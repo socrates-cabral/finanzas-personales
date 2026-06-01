@@ -583,9 +583,9 @@ def _calc_dashboard_patrimonio():
             _bal = _gb()
             if "_error" not in _bal:
                 _prices = _gp()
-                _map = {"BTC": "bitcoin", "ETH": "ethereum", "USDT": "tether", "XBT": "bitcoin"}
+                from crypto_prices import buscar_coin as _bc
                 _total = sum(
-                    _qty * (_prices.get(_map.get(_s.upper(), _s.lower()), {}) or {}).get("price_clp", 0)
+                    _qty * (_prices.get(_bc(_s, _prices) or "", {}) or {}).get("price_clp", 0)
                     for _s, _qty in _bal.items()
                 )
                 st.session_state[_cache_key] = (int(_total), "Kraken Live")
@@ -1710,9 +1710,9 @@ elif pagina == "💎 Patrimonio Neto":
             _bal = _gb()
             if "_error" not in _bal:
                 _prices = _gp()
-                _MAP    = {"BTC": "bitcoin", "ETH": "ethereum", "USDT": "tether", "XBT": "bitcoin"}
+                from crypto_prices import buscar_coin as _bc
                 _total  = sum(
-                    _qty * (_prices.get(_MAP.get(_s.upper(), _s.lower()), {}) or {}).get("price_clp", 0)
+                    _qty * (_prices.get(_bc(_s, _prices) or "", {}) or {}).get("price_clp", 0)
                     for _s, _qty in _bal.items()
                 )
                 st.session_state[_cache_key] = (_total, "Kraken Live")
