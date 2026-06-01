@@ -36,10 +36,10 @@ DEFAULTS = {
     "patrimonio_usdt":         float(os.getenv("PATRIMONIO_USDT", 0.0)),
     "patrimonio_dpto505":      int(os.getenv("PATRIMONIO_DPTO505", 120_000_000)),
     "patrimonio_otros_activos":int(os.getenv("PATRIMONIO_OTROS_ACTIVOS", 0)),
-    "excel_path": os.getenv("EXCEL_FP_PATH", r"C:\ClaudeWork\Plantilla-para-controlar-gastos.xlsm"),
+    "excel_path": os.getenv("EXCEL_FP_PATH", r"C:\ClaudeWork\Plantilla-para-controlar-gastos.xlsm" if os.name == "nt" else ""),
     "liquidaciones_carpeta": os.getenv(
         "LIQUIDACIONES_PATH",
-        r"C:\Users\Socrates Cabral\OneDrive - EGA KAT LOGISTICA SPA\Mi PC\Mi Unidad\Desktop\EGA-KAT\Liquidaciones",
+        r"C:\Users\Socrates Cabral\OneDrive - EGA KAT LOGISTICA SPA\Mi PC\Mi Unidad\Desktop\EGA-KAT\Liquidaciones" if os.name == "nt" else "",
     ),
     # Presupuesto por grupo (0 = sin límite)
     "presupuesto": {
@@ -118,6 +118,44 @@ def calc_total_ingresos() -> float:
         + get_cfg("bono_mensual")
         + get_cfg("otros_ingresos")
     )
+
+
+def get_ingresos_mes(mes: int, anio: int) -> float:
+    """Retorna los ingresos del mes usando lógica de prioridad:
+
+    1. Control_gastos tipo_tx='Ingreso' del mes → suma real (source of truth)
+    2. config_ingresos_mensual override del mes → valor configurado ese mes específico
+    3. config_usuario global → fallback default
+
+    Nunca retorna 0 si hay un default configurado.
+    """
+    try:
+        from data_source import USANDO_SUPABASE
+        if USANDO_SUPABASE:
+            from supabase_repo import (
+                cargar_ingresos_reales_mes as _real,
+                cargar_config_mensual as _mensual,
+            )
+            # Prioridad 1: suma real de transacciones
+            real = _real(mes, anio)
+            if real > 0:
+                return real
+            # Prioridad 2: override mensual configurado
+            cfg_mes = _mensual(mes, anio)
+            if cfg_mes:
+                return (
+                    float(cfg_mes.get("sueldo_liquido") or 0)
+                    + float(cfg_mes.get("anticipo") or 0)
+                    + float(cfg_mes.get("amipass") or 0)
+                    + float(cfg_mes.get("arriendo_cobrado") or 0)
+                    + float(cfg_mes.get("ingreso_variable") or 0)
+                    + float(cfg_mes.get("bono_mensual") or 0)
+                    + float(cfg_mes.get("otros_ingresos") or 0)
+                )
+    except Exception:
+        pass
+    # Prioridad 3: config global
+    return calc_total_ingresos()
 
 
 def render_ajustes_sidebar():
