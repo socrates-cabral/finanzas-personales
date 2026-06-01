@@ -179,7 +179,8 @@ def cargar_categorias(ruta_str: str = None) -> pd.DataFrame:
     if not filas:
         return pd.DataFrame(columns=["grupo", "concepto", "tipo"])
     df = pd.DataFrame(filas)
-    df["tipo"] = df.get("tipo", "Variable")
+    if "tipo" not in df.columns:
+        df["tipo"] = "Variable"
     df["tipo"] = df["tipo"].fillna("Variable")
     return df[["grupo", "concepto", "tipo"]]
 
@@ -411,3 +412,111 @@ def resetear_datos_usuario(confirmar: bool = False) -> dict:
         client.table(tabla).delete().eq("user_id", uid).execute()
         out[tabla] = "borrado"
     return out
+
+
+def cargar_ingresos_reales_mes(mes: int, anio: int) -> float:
+    """Suma importe de filas tipo_tx='Ingreso' del mes/anio dado.
+    Retorna 0.0 si no hay datos o Supabase no disponible."""
+    try:
+        client, uid = _require()
+    except RuntimeError:
+        return 0.0
+    import calendar
+    fecha_ini = f"{anio}-{mes:02d}-01"
+    ultimo = calendar.monthrange(anio, mes)[1]
+    fecha_fin = f"{anio}-{mes:02d}-{ultimo:02d}"
+    try:
+        resp = (
+            client.table("Control_gastos")
+            .select("importe")
+            .eq("user_id", uid)
+            .eq("tipo_tx", "Ingreso")
+            .gte("fecha_date", fecha_ini)
+            .lte("fecha_date", fecha_fin)
+            .execute()
+        )
+        return float(sum(r["importe"] for r in (resp.data or [])))
+    except Exception:
+        return 0.0
+
+
+def cargar_config_mensual(mes: int, anio: int) -> dict:
+    """Lee override de ingresos para el mes/anio dado desde config_ingresos_mensual.
+    Retorna dict con claves de ingreso o {} si no hay fila para ese mes."""
+    try:
+        client, uid = _require()
+    except RuntimeError:
+        return {}
+    try:
+        resp = (
+            client.table("config_ingresos_mensual")
+            .select("sueldo_liquido,anticipo,amipass,arriendo_cobrado,ingreso_variable,bono_mensual,otros_ingresos,nota")
+            .eq("user_id", uid)
+            .eq("anio", anio)
+            .eq("mes", mes)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else {}
+    except Exception:
+        return {}
+
+
+def guardar_config_mensual(mes: int, anio: int, config: dict) -> bool:
+    """Upsert de override mensual de ingresos en config_ingresos_mensual.
+    config: dict con cualquier subconjunto de las claves de ingreso + nota opcional."""
+    try:
+        client, uid = _require()
+    except RuntimeError:
+        return False
+    _campos = {
+        "sueldo_liquido", "anticipo", "amipass", "arriendo_cobrado",
+        "ingreso_variable", "bono_mensual", "otros_ingresos", "nota"
+    }
+    payload = {k: v for k, v in config.items() if k in _campos}
+    payload.update({"user_id": uid, "anio": anio, "mes": mes})
+    try:
+        client.table("config_ingresos_mensual").upsert(
+            payload, on_conflict="user_id,anio,mes"
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+
+def detectar_duplicados_potenciales(
+    fecha_str: str,
+    importe: float,
+    ventana_dias: int = 15,
+    grupo: str = "",
+) -> list:
+    """Busca transacciones con mismo importe en ventana +-ventana_dias dias.
+    Retorna lista de dicts con id, fecha_date, tipo_tx, grupo, concepto, importe.
+    Retorna [] si no hay candidatos o Supabase no disponible."""
+    try:
+        client, uid = _require()
+    except RuntimeError:
+        return []
+    from datetime import datetime, timedelta
+    try:
+        fecha_dt = datetime.strptime(fecha_str, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return []
+    fecha_ini = (fecha_dt - timedelta(days=ventana_dias)).strftime("%Y-%m-%d")
+    fecha_fin = (fecha_dt + timedelta(days=ventana_dias)).strftime("%Y-%m-%d")
+    try:
+        resp = (
+            client.table("Control_gastos")
+            .select("id,fecha_date,tipo_tx,grupo,concepto,importe")
+            .eq("user_id", uid)
+            .eq("importe", importe)
+            .gte("fecha_date", fecha_ini)
+            .lte("fecha_date", fecha_fin)
+            .execute()
+        )
+        candidatos = resp.data or []
+        if grupo:
+            candidatos.sort(key=lambda r: (0 if r.get("grupo") == grupo else 1))
+        return candidatos
+    except Exception:
+        return []
