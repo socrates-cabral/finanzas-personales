@@ -81,7 +81,7 @@ def fuente_activa() -> str:
 # ── Funciones toggleables ─────────────────────────────────────────────────────
 
 @st.cache_data(ttl=300)
-def cargar_transacciones(ruta_str: str = None):
+def cargar_transacciones(ruta_str: str = None, uid: str = ""):
     """Transacciones del año. Excel o Supabase según DATA_SOURCE."""
     if USANDO_SUPABASE:
         return _sb.cargar_transacciones(ruta_str)
@@ -89,7 +89,7 @@ def cargar_transacciones(ruta_str: str = None):
 
 
 @st.cache_data(ttl=300)
-def cargar_categorias(ruta_str: str = None):
+def cargar_categorias(ruta_str: str = None, uid: str = ""):
     """Taxonomía grupo/concepto/tipo. Excel o Supabase según DATA_SOURCE."""
     if USANDO_SUPABASE:
         return _sb.cargar_categorias(ruta_str)
@@ -97,7 +97,7 @@ def cargar_categorias(ruta_str: str = None):
 
 
 @st.cache_data(ttl=300)
-def cargar_patrimonio_mensual(ruta_str: str = None):
+def cargar_patrimonio_mensual(ruta_str: str = None, uid: str = ""):
     """Snapshots de patrimonio. Excel o Supabase según DATA_SOURCE.
 
     Nota: el formato difiere entre fuentes — Excel devuelve la hoja cruda
@@ -111,7 +111,7 @@ def cargar_patrimonio_mensual(ruta_str: str = None):
 
 
 @st.cache_data(ttl=300)
-def cargar_config(ruta_str: str = None) -> dict:
+def cargar_config(ruta_str: str = None, uid: str = "") -> dict:
     """Config key-value del usuario. Excel (hoja Config) o Supabase."""
     if USANDO_SUPABASE:
         return _sb.cargar_config(ruta_str)
