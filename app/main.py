@@ -2558,12 +2558,31 @@ elif pagina == "₿ Inversiones":
 elif pagina == "🏛️ AFP y Previsión":
     st.title("🏛️ AFP y Previsión")
 
-    st.info("📋 Los datos AFP se procesan solo en memoria. No se guardan en disco.")
+    # ── Saldo AFP/AFC — ingreso manual desde certificado PDF ─────────────────
+    with st.expander("💾 Actualizar saldo AFP y AFC (desde certificado PDF)", expanded=False):
+        st.caption("El saldo real proviene del certificado PDF de ProVida/AFC. El Excel solo contiene movimientos históricos.")
+        _col_afp1, _col_afp2 = st.columns(2)
+        with _col_afp1:
+            _nuevo_afp = st.number_input("Saldo AFP ProVida ($)", value=get_cfg("afp_saldo"), step=100_000, format="%d", key="inp_afp_saldo")
+            _nuevo_afc = st.number_input("Saldo AFC Cesantía ($)", value=get_cfg("afc_saldo"), step=100_000, format="%d", key="inp_afc_saldo")
+        with _col_afp2:
+            st.markdown(f"<br>", unsafe_allow_html=True)
+            st.caption("Actual: AFP = " + fmt_clp(get_cfg("afp_saldo")))
+            st.caption("Actual: AFC = " + fmt_clp(get_cfg("afc_saldo")))
+        if st.button("💾 Guardar AFP y AFC", key="btn_guardar_afp_afc"):
+            set_cfg("afp_saldo", _nuevo_afp)
+            set_cfg("afc_saldo", _nuevo_afc)
+            from data_source import USANDO_SUPABASE as _SB_AFP
+            if _SB_AFP:
+                from supabase_repo import guardar_config_bulk as _gcb
+                _gcb({"afp_saldo": _nuevo_afp, "afc_saldo": _nuevo_afc})
+            st.success(f"✅ AFP {fmt_clp(_nuevo_afp)} | AFC {fmt_clp(_nuevo_afc)} guardados.")
+            st.cache_data.clear()
 
     uploaded_afp = st.file_uploader(
-        "Sube tu archivo Excel AFP (ProVida format, opcional)",
+        "Sube tu archivo Excel AFP — Movimientos (ProVida format)",
         type=["xlsx", "xls"],
-        help="Si no subes archivo, se usan los datos de referencia configurados.",
+        help="Solo para ver historial de cotizaciones y proyección. El saldo real se actualiza arriba desde el certificado PDF.",
     )
 
     saldo_afp = get_cfg("afp_saldo")
@@ -2579,10 +2598,7 @@ elif pagina == "🏛️ AFP y Previsión":
             df_afp = cargar_afp_movimientos(tmp_path)
             os.unlink(tmp_path)
             if not df_afp.empty:
-                st.success(f"AFP cargado: {len(df_afp)} movimientos")
-                saldo_afp_calc = df_afp["APORTES"].sum() - df_afp["GIROS"].sum()
-                if saldo_afp_calc > 0:
-                    saldo_afp = saldo_afp_calc
+                st.success(f"AFP cargado: {len(df_afp)} movimientos (historial para proyección)")
         except Exception as e:
             st.warning(f"No se pudo leer el archivo AFP: {e}")
 
