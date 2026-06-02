@@ -2727,7 +2727,7 @@ elif pagina == "🏧 Importar Banco":
                 f'{fmt_clp(_sd["saldo"])} al {_sd["fecha"]}</div>',
                 unsafe_allow_html=True,
             )
-            _col_sd1, _col_sd2, _col_sd3 = st.columns([2, 2, 1])
+            _col_sd1, _col_sd3 = st.columns([3, 1])
             _OPCIONES_DEST = ["Cuenta Ahorro / Más (CA)", "Cuenta Vista (CV)", "Cuenta Corriente (CC)", "Otros activos"]
             # Smart default por banco/cuenta
             _banco_sd  = _sd.get("banco", "").lower()
@@ -2741,17 +2741,11 @@ elif pagina == "🏧 Importar Banco":
             else:
                 _default_idx = 3  # Otros
             _dest = _col_sd1.selectbox(
-                "Actualizar en Patrimonio:",
+                "¿A qué cuenta asignar el saldo?",
                 _OPCIONES_DEST,
                 index=_default_idx,
                 key=f"dest_saldo_{_sd['archivo']}",
             )
-            _col_sd2.metric("Valor actual en config", fmt_clp(
-                get_cfg("patrimonio_ca") if "Ahorro" in _dest
-                else get_cfg("patrimonio_cv") if "Vista" in _dest
-                else get_cfg("patrimonio_cc") if "Corriente" in _dest
-                else get_cfg("patrimonio_otros_activos")
-            ))
             if _col_sd3.button("💾 Aplicar", key=f"btn_saldo_{_sd['archivo']}"):
                 if "Ahorro" in _dest:
                     set_cfg("patrimonio_ca", int(_sd["saldo"]))
