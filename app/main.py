@@ -600,9 +600,10 @@ def _calc_dashboard_patrimonio():
         _crypto_clp_total = int(get_cfg("patrimonio_usdt") * get_cfg("precio_usdt_clp"))
 
     activos = {
-        "Cta. Corriente": get_cfg("patrimonio_cc"),
-        "Cta. Vista": get_cfg("patrimonio_cv"),
-        "Cta. Ahorro/Más": get_cfg("patrimonio_ca"),
+        "CC BCI":          get_cfg("patrimonio_cc"),
+        "CC Itaú":         get_cfg("patrimonio_cc_itau"),
+        "CV BancoEstado":  get_cfg("patrimonio_cv"),
+        "CA Consorcio":    get_cfg("patrimonio_ca"),
         f"Crypto ({_crypto_fuente})": int(_crypto_clp_total),
         "Dpto 505 Los Claros": get_cfg("patrimonio_dpto505"),
         "AFP ProVida": get_cfg("afp_saldo"),
@@ -618,7 +619,9 @@ def _calc_dashboard_patrimonio():
     }
     _ingresos_anuales_pat = float(get_cfg("sueldo_liquido") or 0) * 12
     patr = calc_patrimonio_neto(activos, pasivos, ingresos_anuales=_ingresos_anuales_pat)
-    activos_liquidos = get_cfg("patrimonio_cc") + get_cfg("patrimonio_cv") + get_cfg("patrimonio_ca") + int(_crypto_clp_total)
+    activos_liquidos = (get_cfg("patrimonio_cc") + get_cfg("patrimonio_cc_itau")
+                        + get_cfg("patrimonio_cv") + get_cfg("patrimonio_ca")
+                        + int(_crypto_clp_total))
     return patr, activos_liquidos
 
 
@@ -1729,9 +1732,10 @@ elif pagina == "💎 Patrimonio Neto":
     _crypto_clp_total, _crypto_fuente = st.session_state[_cache_key]
 
     st.sidebar.markdown("### Activos")
-    cc          = st.sidebar.number_input("Cuenta Corriente (CLP)",       value=get_cfg("patrimonio_cc"),            step=100_000,   format="%d")
-    cv          = st.sidebar.number_input("Cuenta Vista (CLP)",           value=get_cfg("patrimonio_cv"),            step=100_000,   format="%d")
-    ca          = st.sidebar.number_input("Cuenta Ahorro / Cuenta Más (CLP)", value=get_cfg("patrimonio_ca"),        step=100_000,   format="%d")
+    cc          = st.sidebar.number_input("CC BCI (CLP)",                 value=get_cfg("patrimonio_cc"),            step=100_000,   format="%d")
+    cc_itau     = st.sidebar.number_input("CC Itaú (CLP)",                value=get_cfg("patrimonio_cc_itau"),       step=100_000,   format="%d")
+    cv          = st.sidebar.number_input("CV BancoEstado (CLP)",         value=get_cfg("patrimonio_cv"),            step=100_000,   format="%d")
+    ca          = st.sidebar.number_input("CA Consorcio / Cuenta Más (CLP)", value=get_cfg("patrimonio_ca"),        step=100_000,   format="%d")
     dpto505_val = st.sidebar.number_input("Dpto 505 Los Claros (valor mercado)", value=get_cfg("patrimonio_dpto505"), step=1_000_000, format="%d")
     afp_val     = get_cfg("afp_saldo")
     afc_val     = get_cfg("afc_saldo")
@@ -1756,6 +1760,7 @@ elif pagina == "💎 Patrimonio Neto":
 
     if st.sidebar.button("💾 Guardar activos"):
         set_cfg("patrimonio_cc",            cc)
+        set_cfg("patrimonio_cc_itau",       cc_itau)
         set_cfg("patrimonio_cv",            cv)
         set_cfg("patrimonio_ca",            ca)
         set_cfg("patrimonio_usdt",          usdt_qty)
@@ -1802,6 +1807,7 @@ elif pagina == "💎 Patrimonio Neto":
             _fecha_snap = datetime.now(_CHILE).strftime("%Y-%m-%d")
             _rows_snap = [
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "cc",            "valor": cc},
+                {"fecha": _fecha_snap, "categoria": "activo", "item": "cc_itau",       "valor": cc_itau},
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "cv",            "valor": cv},
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "ca",            "valor": ca},
                 {"fecha": _fecha_snap, "categoria": "activo", "item": "crypto_clp",    "valor": int(_crypto_clp_total)},
@@ -1820,9 +1826,10 @@ elif pagina == "💎 Patrimonio Neto":
 
 
     activos = {
-        "Cta. Corriente":  cc,
-        "Cta. Vista":      cv,
-        "Cta. Ahorro/Más": ca,
+        "CC BCI":          cc,
+        "CC Itaú":         cc_itau,
+        "CV BancoEstado":  cv,
+        "CA Consorcio":    ca,
         f"Crypto ({_crypto_fuente})": int(_crypto_clp_total),
         "Dpto 505 Los Claros":  dpto505_val,
         "AFP ProVida":          afp_val,
@@ -1872,7 +1879,7 @@ elif pagina == "💎 Patrimonio Neto":
             st.markdown(f'<div class="alert-verde">🟢 Deuda/Ingresos anuales saludable: {ratio_di:.0f}%.</div>', unsafe_allow_html=True)
 
     # Activos líquidos
-    activos_liquidos = cc + cv + ca + int(_crypto_clp_total)
+    activos_liquidos = cc + cc_itau + cv + ca + int(_crypto_clp_total)
     st.metric("💧 Activos Líquidos", fmt_clp(activos_liquidos),
               delta=f"{activos_liquidos/patr['total_activos']*100:.1f}% del total" if patr["total_activos"] > 0 else "0%")
 
@@ -1935,7 +1942,9 @@ elif pagina == "💎 Patrimonio Neto":
                                               + _pivot["consumo"] + _pivot["linea_credito"]
                                               + _pivot["otros_pasivos"])
                 _pivot["patrimonio_neto"]  = _pivot["total_activos"] - _pivot["total_pasivos"]
-                _pivot["activos_liquidos"] = _pivot["cc"] + _pivot.get("cv", 0) + _pivot["ca"] + _pivot["crypto_clp"]
+                _pivot["activos_liquidos"] = (_pivot["cc"] + _pivot.get("cc_itau", 0)
+                                              + _pivot.get("cv", 0) + _pivot["ca"]
+                                              + _pivot["crypto_clp"])
                 _hist = _pivot.to_dict("records")
         except Exception:
             pass
@@ -2728,18 +2737,20 @@ elif pagina == "🏧 Importar Banco":
                 unsafe_allow_html=True,
             )
             _col_sd1, _col_sd3 = st.columns([3, 1])
-            _OPCIONES_DEST = ["Cuenta Ahorro / Más (CA)", "Cuenta Vista (CV)", "Cuenta Corriente (CC)", "Otros activos"]
+            _OPCIONES_DEST = ["CA Consorcio", "CV BancoEstado", "CC BCI", "CC Itaú", "Otros activos"]
             # Smart default por banco/cuenta
             _banco_sd  = _sd.get("banco", "").lower()
             _cuenta_sd = _sd.get("cuenta", "").lower()
             if "consorcio" in _banco_sd or "cuenta_mas" in _cuenta_sd or "mas" in _cuenta_sd:
-                _default_idx = 0  # CA
-            elif "bancoestado" in _banco_sd or "bco. estado" in _banco_sd:
-                _default_idx = 1  # CV
-            elif "bci" in _banco_sd or "itau" in _banco_sd or "falabella" in _banco_sd:
-                _default_idx = 2  # CC
+                _default_idx = 0  # CA Consorcio
+            elif "bancoestado" in _banco_sd:
+                _default_idx = 1  # CV BancoEstado
+            elif "bci" in _banco_sd or "falabella" in _banco_sd:
+                _default_idx = 2  # CC BCI
+            elif "itau" in _banco_sd:
+                _default_idx = 3  # CC Itaú
             else:
-                _default_idx = 3  # Otros
+                _default_idx = 4  # Otros
             _dest = _col_sd1.selectbox(
                 "¿A qué cuenta asignar el saldo?",
                 _OPCIONES_DEST,
@@ -2748,12 +2759,14 @@ elif pagina == "🏧 Importar Banco":
             )
             if _col_sd3.button("💾 Aplicar", key=f"btn_saldo_{_sd['archivo']}"):
                 # 1. Actualizar config en memoria
-                if "Ahorro" in _dest:
-                    set_cfg("patrimonio_ca", int(_sd["saldo"]))
-                elif "Vista" in _dest:
-                    set_cfg("patrimonio_cv", int(_sd["saldo"]))
-                elif "Corriente" in _dest:
-                    set_cfg("patrimonio_cc", int(_sd["saldo"]))
+                if "CA" in _dest:
+                    set_cfg("patrimonio_ca",       int(_sd["saldo"]))
+                elif "CV" in _dest:
+                    set_cfg("patrimonio_cv",       int(_sd["saldo"]))
+                elif "CC BCI" in _dest:
+                    set_cfg("patrimonio_cc",       int(_sd["saldo"]))
+                elif "CC Itaú" in _dest:
+                    set_cfg("patrimonio_cc_itau",  int(_sd["saldo"]))
                 else:
                     set_cfg("patrimonio_otros_activos", int(_sd["saldo"]))
 
@@ -2777,6 +2790,7 @@ elif pagina == "🏧 Importar Banco":
                         _lin = sum(d.get("saldo_actual") or 0 for d in _dj if "linea" in (d.get("tipo") or "").lower().replace("í","i"))
                         _rows_auto = [
                             {"fecha": _fecha_snap, "categoria": "activo", "item": "cc",            "valor": get_cfg("patrimonio_cc")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "cc_itau",       "valor": get_cfg("patrimonio_cc_itau")},
                             {"fecha": _fecha_snap, "categoria": "activo", "item": "cv",            "valor": get_cfg("patrimonio_cv")},
                             {"fecha": _fecha_snap, "categoria": "activo", "item": "ca",            "valor": get_cfg("patrimonio_ca")},
                             {"fecha": _fecha_snap, "categoria": "activo", "item": "crypto_clp",    "valor": _crypto_snap},

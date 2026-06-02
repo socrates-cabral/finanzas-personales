@@ -31,9 +31,10 @@ DEFAULTS = {
     "dividendo_mensual": int(os.getenv("DIVIDENDO_MENSUAL", 595_821)),
     "hipoteca_saldo": 0,
     "precio_usdt_clp": 960,
-    "patrimonio_cc":           int(os.getenv("PATRIMONIO_CC", 0)),
-    "patrimonio_cv":           int(os.getenv("PATRIMONIO_CV", 0)),
-    "patrimonio_ca":           int(os.getenv("PATRIMONIO_CA", 0)),
+    "patrimonio_cc":           int(os.getenv("PATRIMONIO_CC", 0)),        # BCI CC
+    "patrimonio_cc_itau":      int(os.getenv("PATRIMONIO_CC_ITAU", 0)),   # Itaú CC
+    "patrimonio_cv":           int(os.getenv("PATRIMONIO_CV", 0)),        # BancoEstado CV
+    "patrimonio_ca":           int(os.getenv("PATRIMONIO_CA", 0)),        # Consorcio Cuenta Más
     "patrimonio_usdt":         float(os.getenv("PATRIMONIO_USDT", 0.0)),
     "patrimonio_dpto505":      int(os.getenv("PATRIMONIO_DPTO505", 120_000_000)),
     "patrimonio_otros_activos":int(os.getenv("PATRIMONIO_OTROS_ACTIVOS", 0)),
