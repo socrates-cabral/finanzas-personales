@@ -2747,6 +2747,7 @@ elif pagina == "🏧 Importar Banco":
                 key=f"dest_saldo_{_sd['archivo']}",
             )
             if _col_sd3.button("💾 Aplicar", key=f"btn_saldo_{_sd['archivo']}"):
+                # 1. Actualizar config en memoria
                 if "Ahorro" in _dest:
                     set_cfg("patrimonio_ca", int(_sd["saldo"]))
                 elif "Vista" in _dest:
@@ -2755,7 +2756,47 @@ elif pagina == "🏧 Importar Banco":
                     set_cfg("patrimonio_cc", int(_sd["saldo"]))
                 else:
                     set_cfg("patrimonio_otros_activos", int(_sd["saldo"]))
-                st.success(f"✅ {_dest} actualizado a {fmt_clp(_sd['saldo'])}. Ve a Patrimonio Neto → '💾 Guardar activos' para registrar el snapshot.")
+
+                # 2. Guardar snapshot automático en Supabase
+                from data_source import USANDO_SUPABASE as _SB_SNAP
+                if _SB_SNAP:
+                    try:
+                        from supabase_repo import upsert_patrimonio as _up_snap
+                        from debt_manager import obtener_deudas as _get_deudas_snap
+                        _fecha_snap = datetime.now(_CHILE).strftime("%Y-%m-%d")
+                        # Crypto: usar caché de session_state si disponible
+                        _crypto_snap = int(
+                            st.session_state.get("patrimonio_crypto_cache", (0,))[0]
+                            or get_cfg("patrimonio_usdt") * get_cfg("precio_usdt_clp")
+                        )
+                        # Pasivos desde deudas
+                        _dj = _get_deudas_snap()
+                        _hip = sum(d.get("saldo_actual") or 0 for d in _dj if any(t in (d.get("tipo") or "").lower() for t in ["vivienda","hipotecario"]))
+                        _tar = sum(d.get("saldo_actual") or 0 for d in _dj if "tarjeta" in (d.get("tipo") or "").lower())
+                        _con = sum(d.get("saldo_actual") or 0 for d in _dj if any(t in (d.get("tipo") or "").lower() for t in ["consumo","comercial","automotriz"]))
+                        _lin = sum(d.get("saldo_actual") or 0 for d in _dj if "linea" in (d.get("tipo") or "").lower().replace("í","i"))
+                        _rows_auto = [
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "cc",            "valor": get_cfg("patrimonio_cc")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "cv",            "valor": get_cfg("patrimonio_cv")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "ca",            "valor": get_cfg("patrimonio_ca")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "crypto_clp",    "valor": _crypto_snap},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "dpto505",       "valor": get_cfg("patrimonio_dpto505")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "afp",           "valor": get_cfg("afp_saldo")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "afc",           "valor": get_cfg("afc_saldo")},
+                            {"fecha": _fecha_snap, "categoria": "activo", "item": "otros_activos", "valor": get_cfg("patrimonio_otros_activos")},
+                            {"fecha": _fecha_snap, "categoria": "pasivo", "item": "hipoteca",      "valor": int(_hip or get_cfg("hipoteca_saldo") or 0)},
+                            {"fecha": _fecha_snap, "categoria": "pasivo", "item": "tarjetas",      "valor": int(_tar)},
+                            {"fecha": _fecha_snap, "categoria": "pasivo", "item": "consumo",       "valor": int(_con)},
+                            {"fecha": _fecha_snap, "categoria": "pasivo", "item": "linea_credito", "valor": int(_lin)},
+                            {"fecha": _fecha_snap, "categoria": "pasivo", "item": "otros_pasivos", "valor": 0},
+                        ]
+                        _up_snap(pd.DataFrame(_rows_auto))
+                        st.success(f"✅ {_dest} → {fmt_clp(_sd['saldo'])} guardado. Snapshot de patrimonio registrado para hoy.")
+                    except Exception as _e_snap:
+                        st.success(f"✅ {_dest} actualizado a {fmt_clp(_sd['saldo'])}.")
+                        st.caption(f"Snapshot no guardado: {_e_snap}")
+                else:
+                    st.success(f"✅ {_dest} actualizado a {fmt_clp(_sd['saldo'])}.")
         st.markdown("---")
 
     if not _dfs_raw:
