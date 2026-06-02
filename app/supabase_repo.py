@@ -525,3 +525,45 @@ def detectar_duplicados_potenciales(
         return candidatos
     except Exception:
         return []
+
+
+def cargar_cuentas_bancarias() -> list:
+    """Carga todas las cuentas bancarias del usuario con su saldo actual.
+    Retorna lista de dicts: {banco, nombre_cuenta, tipo, saldo, fecha_saldo}."""
+    try:
+        client, uid = _require()
+    except RuntimeError:
+        return []
+    try:
+        resp = (
+            client.table("cuentas_bancarias")
+            .select("banco, nombre_cuenta, tipo, saldo, fecha_saldo")
+            .eq("user_id", uid)
+            .order("tipo")
+            .order("banco")
+            .execute()
+        )
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def upsert_cuenta_bancaria(banco: str, nombre_cuenta: str, tipo: str,
+                           saldo: float, fecha_saldo: str) -> bool:
+    """Upsert de una cuenta bancaria. Conflicto resuelto por (user_id, banco, tipo)."""
+    try:
+        client, uid = _require()
+    except RuntimeError:
+        return False
+    try:
+        client.table("cuentas_bancarias").upsert({
+            "user_id":       uid,
+            "banco":         banco,
+            "nombre_cuenta": nombre_cuenta,
+            "tipo":          tipo,
+            "saldo":         float(saldo),
+            "fecha_saldo":   fecha_saldo,
+        }, on_conflict="user_id,banco,tipo").execute()
+        return True
+    except Exception:
+        return False

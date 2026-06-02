@@ -599,11 +599,26 @@ def _calc_dashboard_patrimonio():
     if _crypto_fuente == "manual":
         _crypto_clp_total = int(get_cfg("patrimonio_usdt") * get_cfg("precio_usdt_clp"))
 
+    # Activos bancarios desde cuentas_bancarias (dinámico) o fallback config
+    from data_source import USANDO_SUPABASE as _SB_CTAS_DASH
+    _ctas_dash = []
+    if _SB_CTAS_DASH:
+        try:
+            from supabase_repo import cargar_cuentas_bancarias as _get_ctas_dash
+            _ctas_dash = _get_ctas_dash()
+        except Exception:
+            pass
+    if _ctas_dash:
+        _activos_bancos = {c["nombre_cuenta"]: float(c.get("saldo") or 0) for c in _ctas_dash}
+    else:
+        _activos_bancos = {
+            "CC BCI":       get_cfg("patrimonio_cc"),
+            "CC Itaú":      get_cfg("patrimonio_cc_itau"),
+            "CV BancoEstado": get_cfg("patrimonio_cv"),
+            "CA Consorcio": get_cfg("patrimonio_ca"),
+        }
     activos = {
-        "CC BCI":          get_cfg("patrimonio_cc"),
-        "CC Itaú":         get_cfg("patrimonio_cc_itau"),
-        "CV BancoEstado":  get_cfg("patrimonio_cv"),
-        "CA Consorcio":    get_cfg("patrimonio_ca"),
+        **_activos_bancos,
         f"Crypto ({_crypto_fuente})": int(_crypto_clp_total),
         "Dpto 505 Los Claros": get_cfg("patrimonio_dpto505"),
         "AFP ProVida": get_cfg("afp_saldo"),
@@ -1731,11 +1746,44 @@ elif pagina == "💎 Patrimonio Neto":
 
     _crypto_clp_total, _crypto_fuente = st.session_state[_cache_key]
 
-    st.sidebar.markdown("### Activos")
-    cc          = st.sidebar.number_input("CC BCI (CLP)",                 value=get_cfg("patrimonio_cc"),            step=100_000,   format="%d")
-    cc_itau     = st.sidebar.number_input("CC Itaú (CLP)",                value=get_cfg("patrimonio_cc_itau"),       step=100_000,   format="%d")
-    cv          = st.sidebar.number_input("CV BancoEstado (CLP)",         value=get_cfg("patrimonio_cv"),            step=100_000,   format="%d")
-    ca          = st.sidebar.number_input("CA Consorcio / Cuenta Más (CLP)", value=get_cfg("patrimonio_ca"),        step=100_000,   format="%d")
+    st.sidebar.markdown("### Cuentas Bancarias")
+    # Cargar cuentas dinámicamente desde Supabase
+    from data_source import USANDO_SUPABASE as _SB_CTAS
+    _cuentas_live = []
+    if _SB_CTAS:
+        from supabase_repo import cargar_cuentas_bancarias as _get_ctas
+        _cuentas_live = _get_ctas()
+
+    # Renderizar inputs dinámicos por cuenta
+    _saldos_editados = {}
+    if _cuentas_live:
+        for _cta in _cuentas_live:
+            _key_cta = f"cta_{_cta['banco']}_{_cta['tipo']}"
+            _saldos_editados[_key_cta] = st.sidebar.number_input(
+                f"{_cta['nombre_cuenta']} ({_cta['tipo'].upper()})",
+                value=int(float(_cta.get("saldo") or 0)),
+                step=100_000, format="%d", key=f"inp_{_key_cta}",
+            )
+    else:
+        # Fallback: campos fijos si no hay Supabase
+        _saldos_editados["cta_bci_cc"]        = st.sidebar.number_input("CC BCI (CLP)",            value=get_cfg("patrimonio_cc"),       step=100_000, format="%d")
+        _saldos_editados["cta_itau_cc"]       = st.sidebar.number_input("CC Itaú (CLP)",           value=get_cfg("patrimonio_cc_itau"),  step=100_000, format="%d")
+        _saldos_editados["cta_bancoestado_cv"]= st.sidebar.number_input("CV BancoEstado (CLP)",    value=get_cfg("patrimonio_cv"),       step=100_000, format="%d")
+        _saldos_editados["cta_consorcio_ca"]  = st.sidebar.number_input("CA Consorcio (CLP)",      value=get_cfg("patrimonio_ca"),       step=100_000, format="%d")
+
+    # Totales por tipo para activos y activos_liquidos
+    def _total_tipo(tipo: str) -> int:
+        if _cuentas_live:
+            return int(sum(float(_c.get("saldo") or 0) for _c in _cuentas_live if _c.get("tipo") == tipo))
+        _map = {"cc": get_cfg("patrimonio_cc") + get_cfg("patrimonio_cc_itau"),
+                "cv": get_cfg("patrimonio_cv"), "ca": get_cfg("patrimonio_ca")}
+        return _map.get(tipo, 0)
+
+    # Compatibilidad: cc, cc_itau, cv, ca para código posterior
+    cc      = _total_tipo("cc")
+    cc_itau = 0   # ya incluido en cc (suma)
+    cv      = _total_tipo("cv")
+    ca      = _total_tipo("ca")
     dpto505_val = st.sidebar.number_input("Dpto 505 Los Claros (valor mercado)", value=get_cfg("patrimonio_dpto505"), step=1_000_000, format="%d")
     afp_val     = get_cfg("afp_saldo")
     afc_val     = get_cfg("afc_saldo")
@@ -1759,10 +1807,17 @@ elif pagina == "💎 Patrimonio Neto":
     otros_pasivos  = st.sidebar.number_input("Otros pasivos (CLP)",    value=0,                    step=10_000,    format="%d")
 
     if st.sidebar.button("💾 Guardar activos"):
-        set_cfg("patrimonio_cc",            cc)
-        set_cfg("patrimonio_cc_itau",       cc_itau)
-        set_cfg("patrimonio_cv",            cv)
-        set_cfg("patrimonio_ca",            ca)
+        # Guardar saldos editados en cuentas_bancarias si Supabase activo
+        if _SB_CTAS and _cuentas_live:
+            from supabase_repo import upsert_cuenta_bancaria as _upsert_cta
+            _hoy_snap = datetime.now(_CHILE).strftime("%Y-%m-%d")
+            for _cta in _cuentas_live:
+                _key_cta = f"cta_{_cta['banco']}_{_cta['tipo']}"
+                _nuevo_saldo = _saldos_editados.get(_key_cta, float(_cta.get("saldo") or 0))
+                _upsert_cta(_cta["banco"], _cta["nombre_cuenta"], _cta["tipo"], _nuevo_saldo, _hoy_snap)
+        set_cfg("patrimonio_usdt",          usdt_qty)
+        set_cfg("patrimonio_dpto505",       dpto505_val)
+        set_cfg("patrimonio_otros_activos", otros_activos)
         set_cfg("patrimonio_usdt",          usdt_qty)
         set_cfg("patrimonio_dpto505",       dpto505_val)
         set_cfg("patrimonio_otros_activos", otros_activos)
@@ -1825,11 +1880,13 @@ elif pagina == "💎 Patrimonio Neto":
         st.sidebar.success("✅ Activos guardados y snapshot del mes registrada.")
 
 
+    # Activos bancarios dinámicos
+    if _cuentas_live:
+        _activos_bancos_pn = {c["nombre_cuenta"]: float(c.get("saldo") or 0) for c in _cuentas_live}
+    else:
+        _activos_bancos_pn = {"CC BCI": cc, "CC Itaú": cc_itau, "CV BancoEstado": cv, "CA Consorcio": ca}
     activos = {
-        "CC BCI":          cc,
-        "CC Itaú":         cc_itau,
-        "CV BancoEstado":  cv,
-        "CA Consorcio":    ca,
+        **_activos_bancos_pn,
         f"Crypto ({_crypto_fuente})": int(_crypto_clp_total),
         "Dpto 505 Los Claros":  dpto505_val,
         "AFP ProVida":          afp_val,
@@ -2737,38 +2794,41 @@ elif pagina == "🏧 Importar Banco":
                 unsafe_allow_html=True,
             )
             _col_sd1, _col_sd3 = st.columns([3, 1])
-            _OPCIONES_DEST = ["CA Consorcio", "CV BancoEstado", "CC BCI", "CC Itaú", "Otros activos"]
-            # Smart default por banco/cuenta
+            # Opciones de tipo: fijas (cc/cv/ca/otro) — escalable a N bancos
+            _TIPOS_LABEL = {"cc": "Cuenta Corriente (CC)", "cv": "Cuenta Vista (CV)",
+                            "ca": "Cuenta Ahorro / Más (CA)", "otro": "Otro"}
+            _TIPOS_OPTS  = list(_TIPOS_LABEL.values())
+            # Smart default por banco detectado
             _banco_sd  = _sd.get("banco", "").lower()
-            _cuenta_sd = _sd.get("cuenta", "").lower()
-            if "consorcio" in _banco_sd or "cuenta_mas" in _cuenta_sd or "mas" in _cuenta_sd:
-                _default_idx = 0  # CA Consorcio
+            if "consorcio" in _banco_sd:
+                _default_tipo = "ca"
             elif "bancoestado" in _banco_sd:
-                _default_idx = 1  # CV BancoEstado
-            elif "bci" in _banco_sd or "falabella" in _banco_sd:
-                _default_idx = 2  # CC BCI
+                _default_tipo = "cv"
             elif "itau" in _banco_sd:
-                _default_idx = 3  # CC Itaú
+                _default_tipo = "cc"
+            elif "bci" in _banco_sd or "falabella" in _banco_sd:
+                _default_tipo = "cc"
             else:
-                _default_idx = 4  # Otros
+                _default_tipo = "otro"
             _dest = _col_sd1.selectbox(
-                "¿A qué cuenta asignar el saldo?",
-                _OPCIONES_DEST,
-                index=_default_idx,
+                "¿A qué tipo de cuenta asignar el saldo?",
+                _TIPOS_OPTS,
+                index=list(_TIPOS_LABEL.keys()).index(_default_tipo),
                 key=f"dest_saldo_{_sd['archivo']}",
             )
+            _tipo_sel = [k for k, v in _TIPOS_LABEL.items() if v == _dest][0]
+
             if _col_sd3.button("💾 Aplicar", key=f"btn_saldo_{_sd['archivo']}"):
-                # 1. Actualizar config en memoria
-                if "CA" in _dest:
-                    set_cfg("patrimonio_ca",       int(_sd["saldo"]))
-                elif "CV" in _dest:
-                    set_cfg("patrimonio_cv",       int(_sd["saldo"]))
-                elif "CC BCI" in _dest:
-                    set_cfg("patrimonio_cc",       int(_sd["saldo"]))
-                elif "CC Itaú" in _dest:
-                    set_cfg("patrimonio_cc_itau",  int(_sd["saldo"]))
-                else:
-                    set_cfg("patrimonio_otros_activos", int(_sd["saldo"]))
+                # 1. Guardar en cuentas_bancarias (dinámico — no hardcodea campos)
+                from data_source import USANDO_SUPABASE as _SB_SNAP
+                if _SB_SNAP:
+                    from supabase_repo import upsert_cuenta_bancaria as _upsert_cta_imp
+                    _nombre_auto = f"{_sd['banco'].upper()} {_tipo_sel.upper()}"
+                    _upsert_cta_imp(
+                        _sd["banco"], _nombre_auto, _tipo_sel,
+                        float(_sd["saldo"]),
+                        _sd["fecha"][:10] if _sd.get("fecha") else datetime.now(_CHILE).strftime("%Y-%m-%d"),
+                    )
 
                 # 2. Guardar snapshot automático en Supabase
                 from data_source import USANDO_SUPABASE as _SB_SNAP
