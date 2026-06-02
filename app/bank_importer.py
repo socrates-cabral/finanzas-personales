@@ -917,6 +917,31 @@ def _extraer_saldo_final(path: Path, banco: str) -> float | None:
                         if s is not None and s > 0:
                             return s
 
+        elif banco == "itau":
+            # Itaú: row con "Saldo Total" en col 1, valor en col 1 de la fila siguiente
+            # Estructura: row 6 = headers (Moneda|Saldo Total|Retenciones|Saldo disponible|...)
+            #             row 7 = valores  (CLP    | 200       | 0         | 200            |...)
+            for i, (_, row) in enumerate(raw.iloc[:12].iterrows()):
+                for ci in range(min(len(row), 5)):
+                    label = str(row.iloc[ci] if ci < len(row) else "").lower()
+                    if "saldo total" in label or "saldo disponible" in label:
+                        # Buscar el valor en la fila siguiente, misma columna
+                        if i + 1 < len(raw):
+                            val_row = raw.iloc[i + 1]
+                            s = _parse_monto(val_row.iloc[ci] if ci < len(val_row) else None)
+                            if s is not None and s >= 0:
+                                return s
+            # Fallback: columna Saldo de primera fila de datos
+            hrow = _find_header_row(raw, ["fecha", "movimiento"])
+            if hrow is not None:
+                headers = [str(v).lower() for v in raw.iloc[hrow]]
+                idx_s = _find_col(headers, ["saldo"])
+                if idx_s is not None:
+                    for _, row in raw.iloc[hrow + 1:].iterrows():
+                        s = _parse_monto(row.iloc[idx_s])
+                        if s is not None and s >= 0:
+                            return s
+
         elif banco == "consorcio":
             hrow = _find_header_row(raw, ["fecha", "descripci"])
             if hrow is None:
@@ -981,8 +1006,8 @@ def parsear_archivo_banco(path: str | Path) -> tuple[pd.DataFrame, dict]:
         else:
             df = _df_vacio()
 
-        # Extraer saldo para bancos soportados (BCI, BancoEstado, Consorcio)
-        if banco in ("bci", "bancoestado", "consorcio"):
+        # Extraer saldo para bancos soportados
+        if banco in ("bci", "bancoestado", "itau", "consorcio"):
             saldo_fin = _extraer_saldo_final(path, banco)
             if saldo_fin is not None:
                 info["saldo_final"] = saldo_fin
