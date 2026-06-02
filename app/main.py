@@ -2728,9 +2728,22 @@ elif pagina == "🏧 Importar Banco":
                 unsafe_allow_html=True,
             )
             _col_sd1, _col_sd2, _col_sd3 = st.columns([2, 2, 1])
+            _OPCIONES_DEST = ["Cuenta Ahorro / Más (CA)", "Cuenta Vista (CV)", "Cuenta Corriente (CC)", "Otros activos"]
+            # Smart default por banco/cuenta
+            _banco_sd  = _sd.get("banco", "").lower()
+            _cuenta_sd = _sd.get("cuenta", "").lower()
+            if "consorcio" in _banco_sd or "cuenta_mas" in _cuenta_sd or "mas" in _cuenta_sd:
+                _default_idx = 0  # CA
+            elif "bancoestado" in _banco_sd or "bco. estado" in _banco_sd:
+                _default_idx = 1  # CV
+            elif "bci" in _banco_sd or "itau" in _banco_sd or "falabella" in _banco_sd:
+                _default_idx = 2  # CC
+            else:
+                _default_idx = 3  # Otros
             _dest = _col_sd1.selectbox(
                 "Actualizar en Patrimonio:",
-                ["Cuenta Ahorro / Más (CA)", "Cuenta Vista (CV)", "Cuenta Corriente (CC)", "Otros activos"],
+                _OPCIONES_DEST,
+                index=_default_idx,
                 key=f"dest_saldo_{_sd['archivo']}",
             )
             _col_sd2.metric("Valor actual en config", fmt_clp(
