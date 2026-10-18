@@ -103,6 +103,7 @@ def chart_barras_gastos_mes(df_mes: pd.DataFrame) -> go.Figure:
         fig = go.Figure()
         fig.update_layout(title="Sin datos", **_LAYOUT_BASE)
         return fig
+    total = df_mes["importe"].sum()
     top = (
         df_mes.groupby("grupo")["importe"]
         .sum()
@@ -111,7 +112,6 @@ def chart_barras_gastos_mes(df_mes: pd.DataFrame) -> go.Figure:
         .reset_index()
     )
     top = top.sort_values("importe", ascending=True)
-    total = top["importe"].sum()
     colores = [COLOR_MAP.get(g, "#6366F1") for g in top["grupo"]]
     etiquetas = [
         f"{fmt_clp(v)}  {v/total*100:.0f}%" if total > 0 else fmt_clp(v)
